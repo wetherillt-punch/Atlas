@@ -8,9 +8,9 @@ export async function GET() {
 
 export async function POST(request) {
   const sql = getDb();
-  const { title } = await request.json();
+  const { title, project } = await request.json();
   if (!title?.trim()) return NextResponse.json({ error: 'No title' }, { status: 400 });
-  const rows = await sql`INSERT INTO tasks (title) VALUES (${title.trim()}) RETURNING *`;
+  const rows = await sql`INSERT INTO tasks (title, project) VALUES (${title.trim()}, ${project || null}) RETURNING *`;
   return NextResponse.json(rows[0]);
 }
 
