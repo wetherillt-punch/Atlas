@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #0c0c0c;
+  --card: #111;
+  --border: #1a1a1a;
+  --text: #d0d0d0;
+  --muted: #555;
+  --red: #e85d45;
+  --green: #2d6b45;
+  --amber: #8B6914;
+  --findr: #5a9e6f;
+  --bha: #e2a832;
+  --cabin: #8B6914;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Source Sans 3', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; color: black; }
+}
