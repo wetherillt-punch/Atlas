@@ -6,7 +6,7 @@ const CATEGORIES = ['Hosting','Software','Contractor','Legal','Legal/IP','Legal/
 const CLIENTS = ['ATRIO Health Plans','P3 Health Partners','Other'];
 const PROJECTS = ['Findr Health','BHA','Cabin/STR'];
 const RATE = 250;
-const CABIN_MONTHLY = 3370; // SBLOC $3,250 + Starlink $120 — auto-debit, not logged as transactions
+const CABIN_MONTHLY = 3370;
 
 const SERVICES = [
   { vendor:'Google Workspace', amount:105.60, entity:'Findr Health', day:31, desc:'Email + docs + drive under findrhealth.com (4 seats)' },
@@ -25,17 +25,6 @@ const SERVICES = [
   { vendor:'Starlink', amount:120, entity:'Cabin/STR', day:1, desc:'Cabin internet — required for STR and remote work' },
   { vendor:'SBLOC Interest', amount:3250, entity:'Cabin/STR', day:1, desc:'Interest-only on $650K property loan @ ~6%' },
   { vendor:'Apple iCloud', amount:9.99, entity:'Personal', day:1, desc:'2TB cloud storage' },
-];
-
-const GAPS = [
-  { item:'Twilio invoices', pri:'HIGH', action:'Pull from Twilio dashboard', entity:'Findr Health' },
-  { item:'Find CPA', pri:'HIGH', action:'April 15 quarterly estimate — 28 days', entity:'BHA' },
-  { item:'Cell phone bill', pri:'MED', action:'Need amount for business split', entity:'Shared' },
-  { item:'DTeam status', pri:'MED', action:'Any invoices after Dec 2025?', entity:'Findr Health' },
-  { item:'Cabin insurance $', pri:'MED', action:'On 6-mo plan, amount unknown', entity:'Cabin/STR' },
-  { item:'Polaris price', pri:'MED', action:'Log purchase amount', entity:'Cabin/STR' },
-  { item:'GitHub billing', pri:'LOW', action:'Free or paid?', entity:'Findr Health' },
-  { item:'Stripe fees', pri:'LOW', action:'Track booking fees', entity:'Findr Health' },
 ];
 
 export default function Home() {
@@ -121,11 +110,10 @@ export default function Home() {
   const unbH = time.filter(t=>t.status==='unbilled').reduce((s,t)=>s+parseFloat(t.hours),0);
   const unbA = unbH * RATE;
   const openTasks = tasks.filter(t => !t.done);
-
-  // Calculate months since Jan 2026 for cabin carry
+  const flaggedTasks = openTasks.filter(t => t.title.startsWith('⚑'));
   const now = new Date();
-  const monthsSinceJan = (now.getFullYear() - 2026) * 12 + now.getMonth(); // 0-indexed months since Jan 2026
-  const cabinCarryYTD = Math.max(monthsSinceJan, 1) * CABIN_MONTHLY;
+  const monthsSinceJan = Math.max((now.getFullYear() - 2026) * 12 + now.getMonth(), 1);
+  const cabinCarryYTD = monthsSinceJan * CABIN_MONTHLY;
 
   if (loading) return <div style={{background:'#0c0c0c',color:'#aaa',height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'monospace',fontSize:15}}>Loading ATLAS...</div>;
 
@@ -152,17 +140,18 @@ export default function Home() {
 
       {/* ========== DASHBOARD ========== */}
       {tab==='dash' && <>
-        {GAPS.filter(g=>g.pri==='HIGH').length>0 && (
+        {/* Flagged tasks — real tasks you can complete */}
+        {flaggedTasks.length>0 && (
           <Card style={{borderLeft:'3px solid #e85d45',marginBottom:16}}>
-            <Lbl>ACTION REQUIRED</Lbl>
-            {GAPS.filter(g=>g.pri==='HIGH').map((g,i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',fontSize:14,borderBottom:'1px solid #1a1a1a'}}>
-                <Badge c="#e85d45">{g.pri}</Badge>
-                <b style={{color:'#eee'}}>{g.item}</b>
-                <span style={{color:'#aaa'}}>— {g.action}</span>
-                <span style={{marginLeft:'auto',fontFamily:'monospace',fontSize:11,color:'#666'}}>{g.entity}</span>
+            <Lbl>NEEDS ATTENTION</Lbl>
+            {flaggedTasks.map(t=>(
+              <div key={t.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',fontSize:14,borderBottom:'1px solid #1a1a1a'}}>
+                <div onClick={()=>toggleTask(t.id,t.done)} style={{width:20,height:20,borderRadius:4,border:'2px solid #e85d45',cursor:'pointer',flexShrink:0}}/>
+                <span style={{flex:1,color:'#ddd'}}>{t.title.replace('⚑ ','')}</span>
+                <span style={{fontFamily:'monospace',fontSize:11,color:'#666'}}>{t.project}</span>
               </div>
             ))}
+            <div onClick={()=>setTab('tasks')} style={{fontSize:13,color:'#888',marginTop:10,cursor:'pointer'}}>View all tasks →</div>
           </Card>
         )}
 
@@ -173,7 +162,7 @@ export default function Home() {
             <Big>${(sumE('Findr Health')+sumE('Shared')*0.4).toFixed(0)} <Sm>YTD</Sm></Big>
             <Sub>Dedicated ${sumE('Findr Health').toFixed(0)} + shared ${(sumE('Shared')*0.4).toFixed(0)}</Sub>
             <Sub>Recurring ~$160/mo • 12 connected services</Sub>
-            {openTasks.filter(t=>t.project==='Findr Health').slice(0,1).map((t,i)=>(
+            {openTasks.filter(t=>t.project==='Findr Health'&&!t.title.startsWith('⚑')).slice(0,1).map((t,i)=>(
               <div key={i} style={{marginTop:12,fontSize:13,color:'#e85d45'}}>→ {t.title}</div>
             ))}
           </Card>
@@ -186,19 +175,19 @@ export default function Home() {
               <Sub>{unbH} hrs @ ${RATE}/hr</Sub>
             </> : <div style={{fontSize:15,color:'#777',padding:'8px 0'}}>No hours logged</div>}
             {invoices.reduce((s,i)=>s+parseFloat(i.amount),0)>0 && <Sub>Invoiced YTD: ${invoices.reduce((s,i)=>s+parseFloat(i.amount),0).toFixed(0)}</Sub>}
-            {openTasks.filter(t=>t.project==='BHA').slice(0,1).map((t,i)=>(
+            {openTasks.filter(t=>t.project==='BHA'&&!t.title.startsWith('⚑')).slice(0,1).map((t,i)=>(
               <div key={i} style={{marginTop:12,fontSize:13,color:'#e85d45'}}>→ {t.title}</div>
             ))}
           </Card>
 
-          {/* Cabin — calculated, not from DB */}
+          {/* Cabin */}
           <Card>
             <Lbl>WILSALL CABIN / STR</Lbl>
             <Big>${cabinCarryYTD.toLocaleString()} <Sm>YTD carry</Sm></Big>
             <Sub>$3,370/mo auto-debit (SBLOC $3,250 + Starlink $120)</Sub>
             <Sub>Remodel budget: $21-43K from cash</Sub>
             <Sub>Rental income: $0 — not yet listed</Sub>
-            {openTasks.filter(t=>t.project==='Cabin/STR').slice(0,1).map((t,i)=>(
+            {openTasks.filter(t=>t.project==='Cabin/STR'&&!t.title.startsWith('⚑')).slice(0,1).map((t,i)=>(
               <div key={i} style={{marginTop:12,fontSize:13,color:'#e85d45'}}>→ {t.title}</div>
             ))}
           </Card>
@@ -207,7 +196,7 @@ export default function Home() {
           <Card>
             <Lbl>SUMMARY</Lbl>
             {[
-              ['All entities YTD',`$${(expenses.reduce((s,e)=>s+parseFloat(e.amount),0) + cabinCarryYTD).toLocaleString()}`],
+              ['All entities YTD',`$${Math.round(expenses.reduce((s,e)=>s+parseFloat(e.amount),0) + cabinCarryYTD).toLocaleString()}`],
               ['Startup costs/mo','~$209'],
               ['Cabin carry/mo','$3,370'],
             ].map(([l,v],i)=>(
@@ -217,23 +206,11 @@ export default function Home() {
             ))}
             <Lbl style={{marginTop:18}}>DEADLINES</Lbl>
             <div style={{display:'flex',alignItems:'center',gap:12,background:'#1a0505',borderRadius:6,padding:'10px 12px',marginTop:6}}>
-              <Badge c="#e85d45">28d</Badge>
+              <Badge c="#e85d45">APR 15</Badge>
               <span style={{fontSize:14,color:'#ddd'}}>BHA quarterly tax — <b style={{color:'#e85d45'}}>NO CPA</b></span>
             </div>
           </Card>
         </div>
-
-        <Card style={{marginTop:16}}>
-          <Lbl>RECEIPT GAPS & OPEN ITEMS</Lbl>
-          {GAPS.map((g,i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'8px 0',fontSize:13,borderBottom:'1px solid #1a1a1a'}}>
-              <Badge c={g.pri==='HIGH'?'#e85d45':g.pri==='MED'?'#e2a832':'#666'}>{g.pri}</Badge>
-              <b style={{color:'#ddd'}}>{g.item}</b>
-              <span style={{color:'#aaa'}}>— {g.action}</span>
-              <span style={{marginLeft:'auto',fontFamily:'monospace',fontSize:11,color:'#666'}}>{g.entity}</span>
-            </div>
-          ))}
-        </Card>
       </>}
 
       {/* ========== EXPENSES ========== */}
@@ -309,15 +286,12 @@ function ExpensesTab({ expenses, del, add }) {
   }
 
   return <>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:18}}>
-      <div>
-        <span style={{fontSize:18,fontWeight:700,color:'#fff'}}>{now.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</span>
-        <span style={{fontSize:14,color:'#aaa',marginLeft:10}}>— ${monthTotal.toFixed(2)} ({expenses.filter(e=>(e.date||'').startsWith(thisMonth)).length} transactions)</span>
-        <span style={{fontSize:14,color:'#666',marginLeft:10}}>| YTD: ${ytdTotal.toFixed(2)}</span>
-      </div>
+    <div style={{marginBottom:18}}>
+      <span style={{fontSize:18,fontWeight:700,color:'#fff'}}>{now.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</span>
+      <span style={{fontSize:14,color:'#aaa',marginLeft:10}}>— ${monthTotal.toFixed(2)} ({expenses.filter(e=>(e.date||'').startsWith(thisMonth)).length} transactions)</span>
+      <span style={{fontSize:14,color:'#666',marginLeft:10}}>| YTD: ${ytdTotal.toFixed(2)}</span>
     </div>
 
-    {/* Quick-log bar */}
     <div style={{display:'flex',gap:8,marginBottom:18,padding:14,background:'#151515',borderRadius:8,border:'1px solid #222',alignItems:'center',flexWrap:'wrap'}}>
       <input ref={inputRef} placeholder="Vendor" value={qv} onChange={e=>setQv(e.target.value)} style={qi} onKeyDown={e=>e.key==='Enter'&&quickAdd()} />
       <input placeholder="$" type="number" step="0.01" value={qa} onChange={e=>setQa(e.target.value)} style={{...qi,width:100}} onKeyDown={e=>e.key==='Enter'&&quickAdd()} />
@@ -326,7 +300,6 @@ function ExpensesTab({ expenses, del, add }) {
       <Btn c="#2d6b45" onClick={quickAdd}>ADD</Btn>
     </div>
 
-    {/* Filters */}
     <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
       {['All','Findr Health','BHA','Cabin/STR','Personal','Shared'].map(f=>(
         <Fbtn key={f} active={filter===f} onClick={()=>setFilter(f)}>{f}</Fbtn>
