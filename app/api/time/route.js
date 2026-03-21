@@ -1,17 +1,14 @@
-import { sql } from '@vercel/postgres';
+import { getDb } from '@/lib/db';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const result = await sql`SELECT * FROM time_entries ORDER BY date DESC`;
-  return NextResponse.json(result.rows);
+  const sql = getDb();
+  return NextResponse.json(await sql`SELECT * FROM time_entries ORDER BY date DESC`);
 }
 
 export async function POST(request) {
-  const { date, client, description, hours, rate } = await request.json();
-  const result = await sql`
-    INSERT INTO time_entries (date, client, description, hours, rate, status)
-    VALUES (${date}, ${client}, ${description}, ${hours}, ${rate || 250}, 'unbilled')
-    RETURNING *
-  `;
-  return NextResponse.json(result.rows[0]);
+  const sql = getDb();
+  const { date, client, description, hours } = await request.json();
+  const rows = await sql`INSERT INTO time_entries (date,client,description,hours,rate,status) VALUES (${date},${client},${description},${hours},250,'unbilled') RETURNING *`;
+  return NextResponse.json(rows[0]);
 }

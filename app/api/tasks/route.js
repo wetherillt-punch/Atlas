@@ -1,32 +1,34 @@
-import { sql } from '@vercel/postgres';
+import { getDb } from '@/lib/db';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const result = await sql`SELECT * FROM tasks ORDER BY 
-    CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
-    created_at ASC`;
-  return NextResponse.json(result.rows);
+  const sql = getDb();
+  return NextResponse.json(await sql`SELECT * FROM tasks ORDER BY done ASC, created_at ASC`);
 }
 
 export async function POST(request) {
-  const { project, title, priority, due_date } = await request.json();
-  const result = await sql`
-    INSERT INTO tasks (project, title, priority, due_date)
-    VALUES (${project}, ${title}, ${priority || 'medium'}, ${due_date || null})
-    RETURNING *
-  `;
-  return NextResponse.json(result.rows[0]);
+  const sql = getDb();
+  const { title } = await request.json();
+  if (!title?.trim()) return NextResponse.json({ error: 'No title' }, { status: 400 });
+  const rows = await sql`INSERT INTO tasks (title) VALUES (${title.trim()}) RETURNING *`;
+  return NextResponse.json(rows[0]);
 }
 
 export async function PATCH(request) {
-  const { id, status } = await request.json();
-  await sql`UPDATE tasks SET status = ${status} WHERE id = ${id}`;
+  const sql = getDb();
+  const { id, done } = await request.json();
+  await sql`UPDATE tasks SET done=${done} WHERE id=${id}`;
   return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(request) {
+  const sql = getDb();
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
-  await sql`DELETE FROM tasks WHERE id = ${id}`;
+  if (id === 'completed') {
+    await sql`DELETE FROM tasks WHERE done=true`;
+  } else {
+    await sql`DELETE FROM tasks WHERE id=${id}`;
+  }
   return NextResponse.json({ ok: true });
 }

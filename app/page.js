@@ -1,11 +1,30 @@
 'use client';
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, useRef } from 'react';
 
 const ENTITIES = ['Findr Health','BHA','Cabin/STR','Personal','Shared'];
 const CATEGORIES = ['Hosting','Software','Contractor','Legal','Legal/IP','Legal/Filing','Domain','Equipment','Capital Improvement','Utilities','Financing','Office','Insurance','Travel','Other'];
 const CLIENTS = ['ATRIO Health Plans','P3 Health Partners','Other'];
 const RATE = 250;
+
+const SERVICES = [
+  { vendor:'Google Workspace', amount:105.60, entity:'Findr Health', day:31, desc:'Email + docs + drive under findrhealth.com (4 seats)' },
+  { vendor:'Vercel (Findr)', amount:20, entity:'Findr Health', day:8, desc:'Hosts the provider portal' },
+  { vendor:'Vercel (Tim)', amount:20, entity:'Findr Health', day:26, desc:'Hosts Quantum Detect + personal projects' },
+  { vendor:'Railway', amount:6, entity:'Findr Health', day:8, desc:'Backend API server + MongoDB database' },
+  { vendor:'Anthropic API', amount:4, entity:'Findr Health', day:0, desc:'Powers AI briefing, reply suggestions, Clarity AI' },
+  { vendor:'Twilio', amount:10, entity:'Findr Health', day:0, desc:'SMS doorbell — notifies patients of provider messages' },
+  { vendor:'Cloudinary', amount:0, entity:'Findr Health', day:0, desc:'Image CDN for provider logos and photos (free)' },
+  { vendor:'Apple Developer', amount:8.25, entity:'Findr Health', day:0, desc:'TestFlight + App Store ($99/yr)' },
+  { vendor:'Neon Postgres', amount:0.03, entity:'Findr Health', day:0, desc:'PEC Beta database via Vercel — may not need' },
+  { vendor:'Stripe', amount:0, entity:'Findr Health', day:0, desc:'Booking payment processing (fees on transactions only)' },
+  { vendor:'Firebase', amount:0, entity:'Findr Health', day:0, desc:'Push notification infra — configured, not yet active (free)' },
+  { vendor:'GitHub', amount:0, entity:'Findr Health', day:0, desc:'Source repos at github.com/Findr-Health (verify free vs paid)' },
+  { vendor:'Claude Max', amount:100, entity:'Shared', day:30, desc:'All Claude chat: Findr 40% / BHA 25% / Personal 35%' },
+  { vendor:'Starlink', amount:120, entity:'Cabin/STR', day:1, desc:'Cabin internet — required for STR and remote work' },
+  { vendor:'SBLOC Interest', amount:3250, entity:'Cabin/STR', day:1, desc:'Interest-only on $650K property loan @ ~6%' },
+  { vendor:'Apple iCloud', amount:9.99, entity:'Personal', day:1, desc:'2TB cloud storage' },
+];
+
 const GAPS = [
   { item:'Twilio invoices', pri:'HIGH', action:'Pull from Twilio dashboard', entity:'Findr Health' },
   { item:'Find CPA', pri:'HIGH', action:'April 15 quarterly estimate — 28 days', entity:'BHA' },
@@ -14,17 +33,7 @@ const GAPS = [
   { item:'Cabin insurance $', pri:'MED', action:'On 6-mo plan, amount unknown', entity:'Cabin/STR' },
   { item:'Polaris price', pri:'MED', action:'Log purchase amount', entity:'Cabin/STR' },
   { item:'GitHub billing', pri:'LOW', action:'Free or paid?', entity:'Findr Health' },
-  { item:'Stripe fees', pri:'LOW', action:'Track booking transaction fees', entity:'Findr Health' },
-];
-const RECURRING = [
-  { vendor:'Google Workspace', amount:105.60, entity:'Findr Health', day:31 },
-  { vendor:'Vercel (Findr)', amount:20, entity:'Findr Health', day:8 },
-  { vendor:'Vercel (Tim)', amount:20, entity:'Findr Health', day:26 },
-  { vendor:'Railway', amount:6, entity:'Findr Health', day:8 },
-  { vendor:'Claude Max', amount:100, entity:'Shared', day:30 },
-  { vendor:'Starlink', amount:120, entity:'Cabin/STR', day:1 },
-  { vendor:'SBLOC Interest', amount:3250, entity:'Cabin/STR', day:1 },
-  { vendor:'Apple iCloud', amount:9.99, entity:'Personal', day:1 },
+  { item:'Stripe fees', pri:'LOW', action:'Track booking fees', entity:'Findr Health' },
 ];
 
 export default function Home() {
@@ -34,7 +43,7 @@ export default function Home() {
   const [invoices, setInvoices] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({});
+  const [f, sf] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { load(); }, []);
@@ -42,314 +51,362 @@ export default function Home() {
   async function load() {
     try {
       const [e, t, i, tk] = await Promise.all([
-        fetch('/api/expenses').then(r => r.json()),
-        fetch('/api/time').then(r => r.json()),
-        fetch('/api/invoices').then(r => r.json()),
-        fetch('/api/tasks').then(r => r.json()),
+        fetch('/api/expenses').then(r=>r.json()),
+        fetch('/api/time').then(r=>r.json()),
+        fetch('/api/invoices').then(r=>r.json()),
+        fetch('/api/tasks').then(r=>r.json()),
       ]);
       setExpenses(e); setTime(t); setInvoices(i); setTasks(tk);
-    } catch (err) { console.error(err); }
+    } catch(err) { console.error(err); }
     setLoading(false);
   }
 
-  async function addExpense() {
-    if (!form.vendor || !form.amount) return;
-    const res = await fetch('/api/expenses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        date: form.date || today(),
-        vendor: form.vendor,
-        amount: parseFloat(form.amount),
-        entity: form.entity || 'Findr Health',
-        category: form.category || 'Other',
-      }),
-    });
-    const exp = await res.json();
-    setExpenses([exp, ...expenses]);
-    setModal(null); setForm({});
+  async function addExpense(data) {
+    const body = data || { date:f.date||today(), vendor:f.vendor, amount:parseFloat(f.amount), entity:f.entity||'Findr Health', category:f.category||'Other' };
+    if (!body.vendor || !body.amount) return;
+    const r = await fetch('/api/expenses', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    setExpenses([await r.json(), ...expenses]);
+    setModal(null); sf({});
   }
 
   async function addTime() {
-    if (!form.hours || !form.desc) return;
-    const res = await fetch('/api/time', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        date: form.date || today(),
-        client: form.client || 'ATRIO Health Plans',
-        description: form.desc,
-        hours: parseFloat(form.hours),
-      }),
-    });
-    const entry = await res.json();
-    setTime([entry, ...time]);
-    setModal(null); setForm({});
+    if (!f.hours || !f.desc) return;
+    const r = await fetch('/api/time', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ date:f.date||today(), client:f.client||'ATRIO Health Plans', description:f.desc, hours:parseFloat(f.hours) }) });
+    setTime([await r.json(), ...time]);
+    setModal(null); sf({});
   }
 
   async function createInvoice() {
-    const client = form.invClient || 'ATRIO Health Plans';
-    const res = await fetch('/api/invoices', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client }),
-    });
-    if (!res.ok) return;
-    await load(); // Refresh all data
-    setModal(null); setForm({});
+    const client = f.invClient || 'ATRIO Health Plans';
+    const r = await fetch('/api/invoices', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ client }) });
+    if (r.ok) await load();
+    setModal(null); sf({});
   }
 
-  async function toggleTask(id, currentStatus) {
-    const newStatus = currentStatus === 'done' ? 'todo' : 'done';
-    await fetch('/api/tasks', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status: newStatus }),
-    });
-    setTasks(tasks.map(t => t.id === id ? { ...t, status: newStatus } : t));
+  async function markPaid(id) {
+    await fetch(`/api/invoices/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ status:'paid' }) });
+    await load();
   }
 
-  async function deleteExpense(id) {
-    await fetch(`/api/expenses?id=${id}`, { method: 'DELETE' });
+  async function delExpense(id) {
+    await fetch(`/api/expenses?id=${id}`, { method:'DELETE' });
     setExpenses(expenses.filter(e => e.id !== id));
   }
 
-  function today() { return new Date().toISOString().split('T')[0]; }
-  const sumE = (entity) => expenses.filter(e => e.entity === entity).reduce((s, e) => s + parseFloat(e.amount), 0);
-  const unbilledHrs = time.filter(t => t.status === 'unbilled').reduce((s, t) => s + parseFloat(t.hours), 0);
-  const unbilledAmt = unbilledHrs * RATE;
+  async function addTask(title) {
+    if (!title.trim()) return;
+    const r = await fetch('/api/tasks', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ title }) });
+    setTasks([...tasks, await r.json()]);
+  }
 
-  if (loading) return <div className="flex items-center justify-center h-screen" style={{ fontFamily: 'var(--mono)', color: '#444' }}>Loading ATLAS...</div>;
+  async function toggleTask(id, done) {
+    await fetch('/api/tasks', { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id, done:!done }) });
+    setTasks(tasks.map(t => t.id===id ? {...t, done:!done} : t));
+  }
+
+  async function clearDone() {
+    await fetch('/api/tasks?id=completed', { method:'DELETE' });
+    setTasks(tasks.filter(t => !t.done));
+  }
+
+  async function delTask(id) {
+    await fetch(`/api/tasks?id=${id}`, { method:'DELETE' });
+    setTasks(tasks.filter(t => t.id !== id));
+  }
+
+  const today = () => new Date().toISOString().split('T')[0];
+  const sumE = (ent) => expenses.filter(e=>e.entity===ent).reduce((s,e)=>s+parseFloat(e.amount),0);
+  const unbH = time.filter(t=>t.status==='unbilled').reduce((s,t)=>s+parseFloat(t.hours),0);
+  const unbA = unbH * RATE;
+
+  if (loading) return <div style={{background:'#0c0c0c',color:'#999',height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'monospace',fontSize:14}}>Loading ATLAS...</div>;
 
   return (
-    <div className="min-h-screen">
+    <div style={{background:'#0c0c0c',color:'#ccc',minHeight:'100vh',fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif'}}>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0}button{cursor:pointer}input,select{font-family:inherit}
+      ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#333;border-radius:3px}`}</style>
+
       {/* NAV */}
-      <nav className="flex items-center px-5 py-2.5 border-b flex-wrap gap-3" style={{ borderColor: 'var(--border)', background: '#0a0a0a' }}>
-        <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 15, letterSpacing: 5, marginRight: 24 }}>
-          <span style={{ color: 'var(--red)' }}>▲</span> <span className="text-white">ATLAS</span>
+      <nav style={{display:'flex',alignItems:'center',padding:'10px 20px',borderBottom:'1px solid #222',background:'#0a0a0a',flexWrap:'wrap',gap:8}}>
+        <div style={{fontFamily:'monospace',fontWeight:700,fontSize:15,letterSpacing:5,marginRight:20,display:'flex',gap:8,alignItems:'center'}}>
+          <span style={{color:'#e85d45'}}>▲</span><span style={{color:'#fff'}}>ATLAS</span>
         </div>
-        {[['dash','DASHBOARD'],['exp','EXPENSES'],['bha','BHA HOURS'],['tasks','TASKS']].map(([k,l]) => (
-          <button key={k} onClick={() => setTab(k)} className="border-none" style={{ background:'none', fontFamily:'var(--mono)', fontSize:10, letterSpacing:2, padding:'8px 14px', color:tab===k?'#fff':'#555', borderBottom:tab===k?'2px solid var(--red)':'2px solid transparent', cursor:'pointer' }}>{l}</button>
+        {[['dash','DASHBOARD'],['exp','EXPENSES'],['bha','BHA HOURS'],['tasks','TASKS']].map(([k,l])=>(
+          <button key={k} onClick={()=>setTab(k)} style={{background:'none',border:'none',fontFamily:'monospace',fontSize:10,letterSpacing:2,padding:'8px 14px',color:tab===k?'#fff':'#777',borderBottom:tab===k?'2px solid #e85d45':'2px solid transparent'}}>{l}</button>
         ))}
-        <div className="flex-1" />
-        <button onClick={() => { setModal('exp'); setForm({ date: today() }); }} className="text-white border-none rounded px-4 py-2 cursor-pointer" style={{ background:'var(--green)', fontFamily:'var(--mono)', fontSize:10, fontWeight:600, letterSpacing:1 }}>+ EXPENSE</button>
-        <button onClick={() => { setModal('hrs'); setForm({ date: today() }); }} className="text-white border-none rounded px-4 py-2 cursor-pointer" style={{ background:'var(--amber)', fontFamily:'var(--mono)', fontSize:10, fontWeight:600, letterSpacing:1 }}>+ HOURS</button>
-        {unbilledHrs > 0 && <button onClick={() => { setModal('inv'); setForm({}); }} className="text-white border-none rounded px-4 py-2 cursor-pointer" style={{ background:'var(--red)', fontFamily:'var(--mono)', fontSize:10, fontWeight:600, letterSpacing:1 }}>INVOICE ${unbilledAmt.toFixed(0)}</button>}
+        <div style={{flex:1}}/>
+        <Btn c="#2d6b45" onClick={()=>{setModal('exp');sf({date:today()})}}>+ EXPENSE</Btn>
+        <Btn c="#8B6914" onClick={()=>{setModal('hrs');sf({date:today()})}}>+ HOURS</Btn>
+        {unbH>0 && <Btn c="#b03a2e" onClick={()=>{setModal('inv');sf({})}}>INVOICE ${unbA.toFixed(0)}</Btn>}
       </nav>
 
-      <div className="max-w-5xl mx-auto p-5">
-        {/* DASHBOARD */}
-        {tab === 'dash' && <>
-          {/* Alerts */}
-          {GAPS.filter(g => g.pri === 'HIGH').length > 0 && (
-            <div className="rounded-lg p-4 mb-4" style={{ background:'var(--card)', border:'1px solid var(--border)', borderLeft:'3px solid var(--red)' }}>
-              <Label>ACTION REQUIRED</Label>
-              {GAPS.filter(g => g.pri === 'HIGH').map((g, i) => (
-                <div key={i} className="flex items-center gap-2.5 py-2 text-sm" style={{ borderBottom:'1px solid #141414' }}>
-                  <Badge color="var(--red)">{g.pri}</Badge>
-                  <strong>{g.item}</strong>
-                  <span style={{ color:'#888' }}>— {g.action}</span>
-                  <span className="ml-auto" style={{ fontFamily:'var(--mono)', fontSize:9, color:'#555' }}>{g.entity}</span>
-                </div>
-              ))}
-            </div>
-          )}
+      <div style={{maxWidth:1100,margin:'0 auto',padding:20}}>
 
-          <div className="grid gap-3.5" style={{ gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))' }}>
-            {/* Findr Card */}
-            <Card>
-              <Label>FINDR HEALTH</Label>
-              <BigNum>${(sumE('Findr Health') + sumE('Shared') * 0.4).toFixed(0)}<Unit> YTD</Unit></BigNum>
-              <Sub>Dedicated ${sumE('Findr Health').toFixed(0)} + shared ${(sumE('Shared') * 0.4).toFixed(0)}</Sub>
-              <Sub>Recurring ~$160/mo</Sub>
-              <div className="mt-3">
-                {tasks.filter(t => t.project === 'Findr Health' && t.priority === 'critical' && t.status !== 'done').map((t, i) => (
-                  <div key={i} style={{ fontSize:12, color:'var(--red)', padding:'3px 0' }}>→ {t.title}</div>
-                ))}
-              </div>
-            </Card>
-
-            {/* BHA Card */}
-            <Card>
-              <Label>BLUNT HEALTH ADVISORY</Label>
-              {unbilledHrs > 0 ? <>
-                <BigNum style={{ color:'var(--bha)' }}>${unbilledAmt.toFixed(0)}<Unit> unbilled</Unit></BigNum>
-                <Sub>{unbilledHrs} hrs @ ${RATE}/hr</Sub>
-                <button onClick={() => { setModal('inv'); setForm({}); }} className="w-full mt-2.5 py-2 rounded border-none text-white cursor-pointer" style={{ background:'var(--red)', fontFamily:'var(--mono)', fontSize:10, fontWeight:600, letterSpacing:1 }}>GENERATE INVOICE →</button>
-              </> : <>
-                <BigNum style={{ color:'var(--findr)' }}>$0<Unit> unbilled</Unit></BigNum>
-                <Sub>No hours pending</Sub>
-              </>}
-              {invoices.reduce((s, i) => s + parseFloat(i.amount), 0) > 0 && <Sub className="mt-2">Invoiced YTD: ${invoices.reduce((s, i) => s + parseFloat(i.amount), 0).toFixed(0)}</Sub>}
-              <div className="mt-3">
-                {tasks.filter(t => t.project === 'BHA' && t.priority === 'critical' && t.status !== 'done').map((t, i) => (
-                  <div key={i} style={{ fontSize:12, color:'var(--red)', padding:'3px 0' }}>→ {t.title}</div>
-                ))}
-              </div>
-            </Card>
-
-            {/* Cabin Card */}
-            <Card>
-              <Label>WILSALL CABIN / STR</Label>
-              <BigNum>${sumE('Cabin/STR').toFixed(0)}<Unit> YTD</Unit></BigNum>
-              <Sub>Monthly carry: $3,370 (SBLOC + Starlink)</Sub>
-              <Sub>Remodel budget: $21-43K</Sub>
-              <Sub>Rental income: $0</Sub>
-            </Card>
-
-            {/* Summary */}
-            <Card>
-              <Label>SUMMARY</Label>
-              {[
-                ['All entities YTD', `$${expenses.reduce((s,e) => s + parseFloat(e.amount), 0).toFixed(0)}`],
-                ['Startup costs/mo', '~$209'],
-                ['Cabin carry/mo', '$3,370'],
-              ].map(([l, v], i) => (
-                <div key={i} className="flex justify-between py-1.5 text-sm" style={{ borderBottom:'1px solid #141414' }}>
-                  <span>{l}</span>
-                  <span style={{ fontWeight:600, fontFamily:'var(--mono)', fontSize:13 }}>{v}</span>
-                </div>
-              ))}
-              <Label className="mt-4">DEADLINES</Label>
-              <div className="flex items-center gap-2.5 rounded p-2 mt-1" style={{ background:'#1a0505' }}>
-                <Badge color="var(--red)">28d</Badge>
-                <span className="text-sm">BHA quarterly tax — <strong>NO CPA</strong></span>
-              </div>
-            </Card>
-          </div>
-
-          {/* Gaps */}
-          <Card className="mt-3.5">
-            <Label>RECEIPT GAPS & OPEN ITEMS</Label>
-            {GAPS.map((g, i) => (
-              <div key={i} className="flex items-center gap-2.5 py-1.5 text-sm" style={{ borderBottom:'1px solid #141414' }}>
-                <Badge color={g.pri === 'HIGH' ? 'var(--red)' : g.pri === 'MED' ? 'var(--bha)' : '#666'}>{g.pri}</Badge>
-                <strong>{g.item}</strong>
-                <span style={{ color:'#777' }}>— {g.action}</span>
-                <span className="ml-auto" style={{ fontFamily:'var(--mono)', fontSize:9, color:'#555' }}>{g.entity}</span>
+      {/* ========== DASHBOARD ========== */}
+      {tab==='dash' && <>
+        {GAPS.filter(g=>g.pri==='HIGH').length>0 && (
+          <Card style={{borderLeft:'3px solid #e85d45',marginBottom:14}}>
+            <Lbl>ACTION REQUIRED</Lbl>
+            {GAPS.filter(g=>g.pri==='HIGH').map((g,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',fontSize:13,borderBottom:'1px solid #1a1a1a'}}>
+                <Badge c="#e85d45">{g.pri}</Badge>
+                <b style={{color:'#eee'}}>{g.item}</b>
+                <span style={{color:'#999'}}>— {g.action}</span>
+                <span style={{marginLeft:'auto',fontFamily:'monospace',fontSize:9,color:'#666'}}>{g.entity}</span>
               </div>
             ))}
           </Card>
-        </>}
+        )}
 
-        {/* EXPENSES TAB */}
-        {tab === 'exp' && <ExpensesTab expenses={expenses} deleteExpense={deleteExpense} setModal={setModal} setForm={setForm} />}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:14}}>
+          {/* Findr */}
+          <Card style={{cursor:'pointer'}} onClick={()=>setTab('exp')}>
+            <Lbl>FINDR HEALTH</Lbl>
+            <Big>${(sumE('Findr Health')+sumE('Shared')*0.4).toFixed(0)} <Sm>YTD</Sm></Big>
+            <Sub>Dedicated ${sumE('Findr Health').toFixed(0)} + shared ${(sumE('Shared')*0.4).toFixed(0)}</Sub>
+            <Sub>Recurring ~$160/mo • 12 connected services</Sub>
+          </Card>
 
-        {/* BHA HOURS TAB */}
-        {tab === 'bha' && <BHATab time={time} invoices={invoices} unbilledHrs={unbilledHrs} unbilledAmt={unbilledAmt} setModal={setModal} setForm={setForm} />}
+          {/* BHA */}
+          <Card style={{cursor:'pointer'}} onClick={()=>setTab('bha')}>
+            <Lbl>BLUNT HEALTH ADVISORY</Lbl>
+            {unbH>0 ? <>
+              <Big style={{color:'#e2a832'}}>${unbA.toFixed(0)} <Sm>unbilled</Sm></Big>
+              <Sub>{unbH} hrs @ ${RATE}/hr</Sub>
+            </> : <>
+              <Big style={{color:'#5a9e6f'}}>$0 <Sm>unbilled</Sm></Big>
+              <Sub>No hours pending</Sub>
+            </>}
+            {invoices.reduce((s,i)=>s+parseFloat(i.amount),0)>0 && <Sub>Invoiced YTD: ${invoices.reduce((s,i)=>s+parseFloat(i.amount),0).toFixed(0)}</Sub>}
+          </Card>
 
-        {/* TASKS TAB */}
-        {tab === 'tasks' && <TasksTab tasks={tasks} toggleTask={toggleTask} />}
+          {/* Cabin */}
+          <Card>
+            <Lbl>WILSALL CABIN / STR</Lbl>
+            <Big>${sumE('Cabin/STR').toFixed(0)} <Sm>YTD</Sm></Big>
+            <Sub>Monthly carry: $3,370 (SBLOC + Starlink)</Sub>
+            <Sub>Remodel budget: $21-43K</Sub>
+            <Sub>Rental income: $0</Sub>
+          </Card>
+
+          {/* Summary */}
+          <Card>
+            <Lbl>SUMMARY</Lbl>
+            {[['All entities YTD',`$${expenses.reduce((s,e)=>s+parseFloat(e.amount),0).toFixed(0)}`],['Startup costs/mo','~$209'],['Cabin carry/mo','$3,370']].map(([l,v],i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',fontSize:13,borderBottom:'1px solid #1a1a1a',color:'#ccc'}}>
+                <span>{l}</span><span style={{fontWeight:600,fontFamily:'monospace'}}>{v}</span>
+              </div>
+            ))}
+            <Lbl style={{marginTop:16}}>DEADLINES</Lbl>
+            <div style={{display:'flex',alignItems:'center',gap:10,background:'#1a0505',borderRadius:4,padding:'8px 10px',marginTop:4}}>
+              <Badge c="#e85d45">28d</Badge>
+              <span style={{fontSize:13,color:'#ddd'}}>BHA quarterly tax — <b style={{color:'#e85d45'}}>NO CPA</b></span>
+            </div>
+          </Card>
+        </div>
+
+        <Card style={{marginTop:14}}>
+          <Lbl>RECEIPT GAPS & OPEN ITEMS</Lbl>
+          {GAPS.map((g,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',fontSize:12,borderBottom:'1px solid #1a1a1a'}}>
+              <Badge c={g.pri==='HIGH'?'#e85d45':g.pri==='MED'?'#e2a832':'#666'}>{g.pri}</Badge>
+              <b style={{color:'#ddd'}}>{g.item}</b>
+              <span style={{color:'#999'}}>— {g.action}</span>
+              <span style={{marginLeft:'auto',fontFamily:'monospace',fontSize:9,color:'#666'}}>{g.entity}</span>
+            </div>
+          ))}
+        </Card>
+      </>}
+
+      {/* ========== EXPENSES ========== */}
+      {tab==='exp' && <ExpensesTab expenses={expenses} del={delExpense} add={addExpense} />}
+
+      {/* ========== BHA ========== */}
+      {tab==='bha' && <BHATab time={time} invoices={invoices} unbH={unbH} unbA={unbA} setModal={setModal} sf={sf} markPaid={markPaid} today={today} />}
+
+      {/* ========== TASKS ========== */}
+      {tab==='tasks' && <TasksTab tasks={tasks} toggle={toggleTask} add={addTask} clearDone={clearDone} del={delTask} />}
+
       </div>
 
-      {/* MODALS */}
-      {modal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background:'rgba(0,0,0,.85)' }} onClick={() => setModal(null)}>
-          <div className="w-full max-w-md rounded-xl p-6" style={{ background:'var(--card)', border:'1px solid #222' }} onClick={e => e.stopPropagation()}>
-            {modal === 'exp' && <>
-              <ModalTitle>Log Expense</ModalTitle>
-              <Input type="date" value={form.date || ''} onChange={e => setForm({...form, date: e.target.value})} />
-              <Input placeholder="Vendor" value={form.vendor || ''} onChange={e => setForm({...form, vendor: e.target.value})} autoFocus />
-              <Input placeholder="Amount" type="number" step="0.01" value={form.amount || ''} onChange={e => setForm({...form, amount: e.target.value})} />
-              <Select value={form.entity || 'Findr Health'} onChange={e => setForm({...form, entity: e.target.value})} options={ENTITIES} />
-              <Select value={form.category || 'Other'} onChange={e => setForm({...form, category: e.target.value})} options={CATEGORIES} />
-              <SubmitBtn color="var(--green)" onClick={addExpense}>LOG EXPENSE</SubmitBtn>
-            </>}
-            {modal === 'hrs' && <>
-              <ModalTitle>Log BHA Hours</ModalTitle>
-              <Input type="date" value={form.date || ''} onChange={e => setForm({...form, date: e.target.value})} />
-              <Select value={form.client || 'ATRIO Health Plans'} onChange={e => setForm({...form, client: e.target.value})} options={CLIENTS} />
-              <Input placeholder="Description of work" value={form.desc || ''} onChange={e => setForm({...form, desc: e.target.value})} autoFocus />
-              <Input placeholder="Hours" type="number" step="0.5" value={form.hours || ''} onChange={e => setForm({...form, hours: e.target.value})} />
-              <div style={{ fontFamily:'var(--mono)', fontSize:13, color:'var(--bha)', textAlign:'right', padding:'4px 0 8px' }}>${RATE}/hr × {form.hours || 0} = ${((form.hours || 0) * RATE).toFixed(2)}</div>
-              <SubmitBtn color="var(--amber)" onClick={addTime}>LOG HOURS</SubmitBtn>
-            </>}
-            {modal === 'inv' && <>
-              <ModalTitle>Generate Invoice</ModalTitle>
-              <Select value={form.invClient || 'ATRIO Health Plans'} onChange={e => setForm({...form, invClient: e.target.value})} options={CLIENTS} />
-              <InvoicePreview time={time} invoices={invoices} client={form.invClient || 'ATRIO Health Plans'} onCreate={createInvoice} />
-            </>}
-          </div>
+      {/* ========== MODALS ========== */}
+      {modal && <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={()=>setModal(null)}>
+        <div style={{background:'#111',border:'1px solid #282828',borderRadius:10,padding:24,width:'100%',maxWidth:460,maxHeight:'90vh',overflow:'auto'}} onClick={e=>e.stopPropagation()}>
+          {modal==='exp' && <>
+            <Mtitle>Log Expense</Mtitle>
+            <Minput type="date" value={f.date||''} onChange={e=>sf({...f,date:e.target.value})} />
+            <Minput placeholder="Vendor" value={f.vendor||''} onChange={e=>sf({...f,vendor:e.target.value})} autoFocus />
+            <Minput placeholder="Amount" type="number" step="0.01" value={f.amount||''} onChange={e=>sf({...f,amount:e.target.value})} />
+            <Mselect value={f.entity||'Findr Health'} onChange={e=>sf({...f,entity:e.target.value})} opts={ENTITIES} />
+            <Mselect value={f.category||'Other'} onChange={e=>sf({...f,category:e.target.value})} opts={CATEGORIES} />
+            <button onClick={()=>addExpense()} style={{width:'100%',padding:12,background:'#2d6b45',border:'none',color:'#fff',borderRadius:6,fontFamily:'monospace',fontSize:12,fontWeight:700,letterSpacing:2,marginTop:4}}>LOG EXPENSE</button>
+          </>}
+          {modal==='hrs' && <>
+            <Mtitle>Log BHA Hours</Mtitle>
+            <Minput type="date" value={f.date||''} onChange={e=>sf({...f,date:e.target.value})} />
+            <Mselect value={f.client||'ATRIO Health Plans'} onChange={e=>sf({...f,client:e.target.value})} opts={CLIENTS} />
+            <Minput placeholder="Description of work" value={f.desc||''} onChange={e=>sf({...f,desc:e.target.value})} autoFocus />
+            <Minput placeholder="Hours" type="number" step="0.5" value={f.hours||''} onChange={e=>sf({...f,hours:e.target.value})} />
+            <div style={{fontFamily:'monospace',fontSize:13,color:'#e2a832',textAlign:'right',padding:'4px 0 8px'}}>${RATE}/hr × {f.hours||0} = ${((f.hours||0)*RATE).toFixed(2)}</div>
+            <button onClick={addTime} style={{width:'100%',padding:12,background:'#8B6914',border:'none',color:'#fff',borderRadius:6,fontFamily:'monospace',fontSize:12,fontWeight:700,letterSpacing:2}}>LOG HOURS</button>
+          </>}
+          {modal==='inv' && <>
+            <Mtitle>Generate Invoice</Mtitle>
+            <Mselect value={f.invClient||'ATRIO Health Plans'} onChange={e=>sf({...f,invClient:e.target.value})} opts={CLIENTS} />
+            <InvPreview time={time} invoices={invoices} client={f.invClient||'ATRIO Health Plans'} onCreate={createInvoice} />
+          </>}
         </div>
-      )}
+      </div>}
     </div>
   );
 }
 
-function ExpensesTab({ expenses, deleteExpense, setModal, setForm }) {
+/* ============ EXPENSES TAB ============ */
+function ExpensesTab({ expenses, del, add }) {
   const [filter, setFilter] = useState('All');
-  const filtered = filter === 'All' ? expenses : expenses.filter(e => e.entity === filter);
-  const total = filtered.reduce((s, e) => s + parseFloat(e.amount), 0);
-  
+  const [dateRange, setDateRange] = useState('all');
+  const [qv, setQv] = useState('');
+  const [qa, setQa] = useState('');
+  const [qe, setQe] = useState('Findr Health');
+  const [qc, setQc] = useState('Other');
+  const inputRef = useRef(null);
+
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const lastMonth = now.getMonth()===0 ? `${now.getFullYear()-1}-12` : `${now.getFullYear()}-${String(now.getMonth()).padStart(2,'0')}`;
+
+  let filtered = filter==='All' ? expenses : expenses.filter(e=>e.entity===filter);
+  if (dateRange==='this') filtered = filtered.filter(e=>(e.date||'').startsWith(thisMonth));
+  if (dateRange==='last') filtered = filtered.filter(e=>(e.date||'').startsWith(lastMonth));
+
+  const total = filtered.reduce((s,e)=>s+parseFloat(e.amount),0);
+  const monthTotal = expenses.filter(e=>(e.date||'').startsWith(thisMonth)).reduce((s,e)=>s+parseFloat(e.amount),0);
+
+  function quickAdd() {
+    if (!qv.trim()||!qa) return;
+    add({ date:new Date().toISOString().split('T')[0], vendor:qv.trim(), amount:parseFloat(qa), entity:qe, category:qc });
+    setQv(''); setQa('');
+    inputRef.current?.focus();
+  }
+
   return <>
-    <div className="flex gap-1.5 mb-4 flex-wrap items-center">
-      {['All','Findr Health','BHA','Cabin/STR','Personal','Shared'].map(f => (
-        <button key={f} onClick={() => setFilter(f)} className="rounded px-3 py-1 cursor-pointer" style={{ background:filter===f?'#1e1e1e':'transparent', border:'1px solid #222', color:filter===f?'#fff':'#555', fontFamily:'var(--mono)', fontSize:9, letterSpacing:1 }}>{f}</button>
-      ))}
-      <div className="flex-1" />
-      <button onClick={() => { setModal('exp'); setForm({ date: new Date().toISOString().split('T')[0] }); }} className="text-white border-none rounded px-4 py-2 cursor-pointer" style={{ background:'var(--green)', fontFamily:'var(--mono)', fontSize:10, fontWeight:600 }}>+ EXPENSE</button>
+    {/* Monthly summary */}
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+      <div style={{fontSize:13,color:'#aaa'}}>
+        <b style={{color:'#fff',fontSize:15}}>{now.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</b> — ${monthTotal.toFixed(2)} across {expenses.filter(e=>(e.date||'').startsWith(thisMonth)).length} transactions
+      </div>
     </div>
-    <table className="w-full" style={{ borderCollapse:'collapse' }}>
-      <thead><tr>{['Date','Vendor','Amount','Entity','Category',''].map(h => <Th key={h}>{h}</Th>)}</tr></thead>
-      <tbody>{filtered.map(e => (
-        <tr key={e.id} style={{ borderBottom:'1px solid #141414' }}>
-          <Td>{e.date?.split('T')[0]}</Td>
-          <Td>{e.vendor}</Td>
+
+    {/* Quick-log bar */}
+    <div style={{display:'flex',gap:6,marginBottom:16,padding:12,background:'#151515',borderRadius:8,border:'1px solid #222',alignItems:'center',flexWrap:'wrap'}}>
+      <input ref={inputRef} placeholder="Vendor" value={qv} onChange={e=>setQv(e.target.value)} style={qi} onKeyDown={e=>e.key==='Enter'&&quickAdd()} />
+      <input placeholder="$" type="number" step="0.01" value={qa} onChange={e=>setQa(e.target.value)} style={{...qi,width:90}} onKeyDown={e=>e.key==='Enter'&&quickAdd()} />
+      <select value={qe} onChange={e=>setQe(e.target.value)} style={{...qi,width:130}}>{ENTITIES.map(e=><option key={e}>{e}</option>)}</select>
+      <select value={qc} onChange={e=>setQc(e.target.value)} style={{...qi,width:130}}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
+      <Btn c="#2d6b45" onClick={quickAdd}>ADD</Btn>
+    </div>
+
+    {/* Filters */}
+    <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap',alignItems:'center'}}>
+      {['All','Findr Health','BHA','Cabin/STR','Personal','Shared'].map(f=>(
+        <Fbtn key={f} active={filter===f} onClick={()=>setFilter(f)}>{f}</Fbtn>
+      ))}
+      <div style={{width:1,height:20,background:'#222',margin:'0 4px'}}/>
+      {[['all','All Time'],['this','This Month'],['last','Last Month']].map(([k,l])=>(
+        <Fbtn key={k} active={dateRange===k} onClick={()=>setDateRange(k)}>{l}</Fbtn>
+      ))}
+    </div>
+
+    {/* Expense table */}
+    <table style={{width:'100%',borderCollapse:'collapse'}}>
+      <thead><tr>{['Date','Vendor','Amount','Entity','Category',''].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
+      <tbody>{filtered.map(e=>(
+        <tr key={e.id} style={{borderBottom:'1px solid #1a1a1a'}}>
+          <Td>{(e.date||'').split('T')[0]}</Td>
+          <Td c="#ddd">{e.vendor}</Td>
           <TdR>${parseFloat(e.amount).toFixed(2)}</TdR>
-          <Td><EntityTag entity={e.entity} /></Td>
+          <Td><Etag e={e.entity}/></Td>
           <Td>{e.category}</Td>
-          <TdR><button onClick={() => deleteExpense(e.id)} className="border-none cursor-pointer" style={{ background:'none', color:'#333', fontSize:14 }}>×</button></TdR>
+          <TdR><button onClick={()=>del(e.id)} style={{background:'none',border:'none',color:'#444',fontSize:14,cursor:'pointer',padding:'2px 6px'}}>×</button></TdR>
         </tr>
       ))}</tbody>
     </table>
-    {filtered.length > 0 && <div className="text-right py-3" style={{ fontWeight:700, fontFamily:'var(--mono)', fontSize:14, color:'#fff' }}>Total: ${total.toFixed(2)}</div>}
-    
-    <div className="mt-8 pt-4" style={{ borderTop:'1px solid var(--border)' }}>
-      <Label>RECURRING — VERIFY MONTHLY</Label>
-      <table className="w-full mt-2" style={{ borderCollapse:'collapse' }}>
-        <thead><tr>{['Vendor','Expected','Entity','~Day'].map(h => <Th key={h}>{h}</Th>)}</tr></thead>
-        <tbody>{RECURRING.map((r, i) => <tr key={i}><Td>{r.vendor}</Td><TdR>${r.amount.toFixed(2)}</TdR><Td>{r.entity}</Td><Td>{r.day}</Td></tr>)}</tbody>
+    {filtered.length>0 && <div style={{textAlign:'right',padding:'12px 0',fontWeight:700,fontFamily:'monospace',fontSize:14,color:'#fff'}}>Total: ${total.toFixed(2)}</div>}
+
+    {/* Services inventory */}
+    <div style={{marginTop:32,borderTop:'1px solid #222',paddingTop:16}}>
+      <Lbl>ALL SERVICES — WHAT YOU'RE PAYING FOR</Lbl>
+      <table style={{width:'100%',borderCollapse:'collapse',marginTop:8}}>
+        <thead><tr>{['Service','Cost','Entity','Purpose'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
+        <tbody>{SERVICES.map((s,i)=>(
+          <tr key={i} style={{borderBottom:'1px solid #1a1a1a'}}>
+            <Td c="#ddd">{s.vendor}</Td>
+            <TdR>{s.amount>0?`$${s.amount.toFixed(2)}`:'Free'}</TdR>
+            <Td><Etag e={s.entity}/></Td>
+            <Td c="#aaa">{s.desc}</Td>
+          </tr>
+        ))}</tbody>
       </table>
+      <div style={{fontSize:12,color:'#666',marginTop:12,fontFamily:'monospace'}}>
+        Findr paid services: ~$174/mo • Free services: Cloudinary, Firebase, GitHub, Stripe (tx only)
+      </div>
     </div>
   </>;
 }
 
-function BHATab({ time, invoices, unbilledHrs, unbilledAmt, setModal, setForm }) {
+/* ============ BHA TAB ============ */
+function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, today }) {
+  const thisWeekHrs = time.filter(t => {
+    const d = new Date(t.date);
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7*86400000);
+    return d >= weekAgo && t.status === 'unbilled';
+  }).reduce((s,t)=>s+parseFloat(t.hours),0);
+
   return <>
-    <div className="flex justify-between items-center mb-5">
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20,flexWrap:'wrap',gap:12}}>
       <div>
-        <span style={{ fontSize:28, fontWeight:700, fontFamily:'var(--mono)', color: unbilledHrs > 0 ? 'var(--bha)' : 'var(--findr)' }}>${unbilledAmt.toFixed(0)}</span>
-        <span style={{ color:'#666', marginLeft:8, fontSize:13 }}>{unbilledHrs} hrs unbilled</span>
+        <span style={{fontSize:28,fontWeight:700,fontFamily:'monospace',color:unbH>0?'#e2a832':'#5a9e6f'}}>${unbA.toFixed(0)}</span>
+        <span style={{color:'#aaa',marginLeft:8,fontSize:13}}>{unbH} hrs unbilled @ $250/hr</span>
+        {thisWeekHrs>0 && <div style={{fontSize:12,color:'#999',marginTop:4}}>This week: {thisWeekHrs} hrs / ${(thisWeekHrs*RATE).toFixed(0)}</div>}
       </div>
-      <div className="flex gap-2">
-        <button onClick={() => { setModal('hrs'); setForm({ date: new Date().toISOString().split('T')[0] }); }} className="text-white border-none rounded px-4 py-2 cursor-pointer" style={{ background:'var(--amber)', fontFamily:'var(--mono)', fontSize:10, fontWeight:600 }}>+ LOG HOURS</button>
-        {unbilledHrs > 0 && <button onClick={() => { setModal('inv'); setForm({}); }} className="text-white border-none rounded px-4 py-2 cursor-pointer" style={{ background:'var(--red)', fontFamily:'var(--mono)', fontSize:10, fontWeight:600 }}>GENERATE INVOICE</button>}
+      <div style={{display:'flex',gap:8}}>
+        <Btn c="#8B6914" onClick={()=>{setModal('hrs');sf({date:today()})}}>+ LOG HOURS</Btn>
+        {unbH>0 && <Btn c="#b03a2e" onClick={()=>{setModal('inv');sf({})}}>GENERATE INVOICE</Btn>}
       </div>
     </div>
-    <Label>TIME ENTRIES</Label>
-    <table className="w-full mt-2" style={{ borderCollapse:'collapse' }}>
-      <thead><tr>{['Date','Client','Description','Hours','Amount','Status'].map(h => <Th key={h}>{h}</Th>)}</tr></thead>
+
+    <Lbl>TIME ENTRIES</Lbl>
+    <table style={{width:'100%',borderCollapse:'collapse',marginTop:8}}>
+      <thead><tr>{['Date','Client','Description','Hours','Amount','Status'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
       <tbody>
-        {time.map(t => (
-          <tr key={t.id} style={{ borderBottom:'1px solid #141414' }}>
-            <Td>{t.date?.split('T')[0]}</Td><Td>{t.client}</Td><Td>{t.description}</Td>
-            <TdR>{parseFloat(t.hours).toFixed(1)}</TdR><TdR>${(parseFloat(t.hours) * RATE).toFixed(2)}</TdR>
-            <Td><StatusTag status={t.status} /></Td>
+        {time.map(t=>(
+          <tr key={t.id} style={{borderBottom:'1px solid #1a1a1a'}}>
+            <Td>{(t.date||'').split('T')[0]}</Td><Td c="#ddd">{t.client}</Td><Td>{t.description}</Td>
+            <TdR>{parseFloat(t.hours).toFixed(1)}</TdR><TdR>${(parseFloat(t.hours)*RATE).toFixed(2)}</TdR>
+            <Td><Stag s={t.status}/></Td>
           </tr>
         ))}
-        {time.length === 0 && <tr><td colSpan={6} className="text-center py-10" style={{ color:'#444', fontSize:13 }}>No hours logged yet.</td></tr>}
+        {time.length===0 && <tr><td colSpan={6} style={{textAlign:'center',padding:40,color:'#666',fontSize:13}}>No hours logged yet. Click "+ LOG HOURS" to start.</td></tr>}
       </tbody>
     </table>
-    {invoices.length > 0 && <>
-      <Label className="mt-8">INVOICES</Label>
-      <table className="w-full mt-2" style={{ borderCollapse:'collapse' }}>
-        <thead><tr>{['Invoice','Client','Hours','Amount','Date','Status',''].map(h => <Th key={h}>{h}</Th>)}</tr></thead>
-        <tbody>{invoices.map(inv => (
-          <tr key={inv.id} style={{ borderBottom:'1px solid #141414' }}>
-            <Td>{inv.number}</Td><Td>{inv.client}</Td><TdR>{parseFloat(inv.hours).toFixed(1)}</TdR>
-            <TdR>${parseFloat(inv.amount).toFixed(2)}</TdR><Td>{inv.date_sent?.split('T')[0]}</Td>
-            <Td><StatusTag status={inv.status} /></Td>
-            <Td><Link href={`/invoice/${inv.id}`} className="no-underline" style={{ fontFamily:'var(--mono)', fontSize:9, color:'var(--bha)', letterSpacing:1 }}>VIEW →</Link></Td>
+
+    {invoices.length>0 && <>
+      <Lbl style={{marginTop:32}}>INVOICES</Lbl>
+      <table style={{width:'100%',borderCollapse:'collapse',marginTop:8}}>
+        <thead><tr>{['Invoice','Client','Hours','Amount','Sent','Due','Status',''].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
+        <tbody>{invoices.map(inv=>(
+          <tr key={inv.id} style={{borderBottom:'1px solid #1a1a1a'}}>
+            <Td c="#ddd">{inv.number}</Td><Td>{inv.client}</Td>
+            <TdR>{parseFloat(inv.hours).toFixed(1)}</TdR><TdR>${parseFloat(inv.amount).toFixed(2)}</TdR>
+            <Td>{(inv.date_sent||'').split('T')[0]}</Td><Td>{(inv.due_date||'').split('T')[0]}</Td>
+            <Td><Stag s={inv.status}/></Td>
+            <Td>
+              <div style={{display:'flex',gap:6}}>
+                <a href={`/invoice/${inv.id}`} style={{fontFamily:'monospace',fontSize:9,color:'#e2a832',letterSpacing:1,textDecoration:'none'}}>VIEW</a>
+                {inv.status==='sent' && <button onClick={()=>markPaid(inv.id)} style={{background:'none',border:'none',fontFamily:'monospace',fontSize:9,color:'#5a9e6f',letterSpacing:1,cursor:'pointer'}}>MARK PAID</button>}
+              </div>
+            </Td>
           </tr>
         ))}</tbody>
       </table>
@@ -357,105 +414,91 @@ function BHATab({ time, invoices, unbilledHrs, unbilledAmt, setModal, setForm })
   </>;
 }
 
-function TasksTab({ tasks, toggleTask }) {
+/* ============ TASKS TAB — PAPER LIST ============ */
+function TasksTab({ tasks, toggle, add, clearDone, del }) {
+  const [input, setInput] = useState('');
+  const inputRef = useRef(null);
+  const pending = tasks.filter(t=>!t.done);
+  const done = tasks.filter(t=>t.done);
+
+  function handleAdd() {
+    if (!input.trim()) return;
+    add(input);
+    setInput('');
+    inputRef.current?.focus();
+  }
+
   return <>
-    {['Findr Health','BHA','Cabin/STR'].map(p => {
-      const pt = tasks.filter(t => t.project === p);
-      if (!pt.length) return null;
-      return (
-        <div key={p} className="mb-7">
-          <Label>{p.toUpperCase()}</Label>
-          {pt.map(t => (
-            <div key={t.id} onClick={() => toggleTask(t.id, t.status)} className="flex items-center gap-3 py-2.5 cursor-pointer" style={{ borderBottom:'1px solid #141414', opacity: t.status === 'done' ? 0.35 : 1 }}>
-              <span className="flex items-center justify-center rounded" style={{ width:18, height:18, border:`2px solid ${t.status==='done'?'var(--findr)':'#333'}`, background:t.status==='done'?'var(--findr)':'transparent', fontSize:11, color:'#fff', flexShrink:0 }}>{t.status === 'done' ? '✓' : ''}</span>
-              <span className="flex-1 text-sm" style={{ textDecoration:t.status==='done'?'line-through':'none' }}>{t.title}</span>
-              <span style={{ fontFamily:'var(--mono)', fontSize:9, color:t.priority==='critical'?'var(--red)':t.priority==='high'?'var(--bha)':'#555' }}>{t.priority}</span>
-            </div>
-          ))}
+    {/* Add input */}
+    <div style={{display:'flex',gap:8,marginBottom:24}}>
+      <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleAdd()}
+        placeholder="Add a task and press enter..." 
+        style={{flex:1,background:'#151515',border:'1px solid #282828',borderRadius:6,padding:'12px 16px',color:'#ddd',fontSize:14,outline:'none'}} />
+      {done.length>0 && <button onClick={clearDone} style={{background:'none',border:'1px solid #333',borderRadius:6,padding:'8px 16px',color:'#888',fontFamily:'monospace',fontSize:10,letterSpacing:1,cursor:'pointer',whiteSpace:'nowrap'}}>CLEAR DONE ({done.length})</button>}
+    </div>
+
+    {/* Pending tasks */}
+    {pending.map(t=>(
+      <div key={t.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 0',borderBottom:'1px solid #1a1a1a'}}>
+        <div onClick={()=>toggle(t.id,t.done)} style={{width:20,height:20,borderRadius:4,border:'2px solid #444',cursor:'pointer',flexShrink:0}} />
+        <span style={{flex:1,fontSize:14,color:'#ddd'}}>{t.title}</span>
+        <button onClick={()=>del(t.id)} style={{background:'none',border:'none',color:'#333',fontSize:16,cursor:'pointer',padding:'0 4px'}}>×</button>
+      </div>
+    ))}
+
+    {/* Done tasks */}
+    {done.length>0 && <>
+      <div style={{marginTop:24,marginBottom:8,fontFamily:'monospace',fontSize:10,letterSpacing:2,color:'#555'}}>COMPLETED</div>
+      {done.map(t=>(
+        <div key={t.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:'1px solid #141414',opacity:0.4}}>
+          <div onClick={()=>toggle(t.id,t.done)} style={{width:20,height:20,borderRadius:4,border:'2px solid #5a9e6f',background:'#5a9e6f',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#fff'}}>✓</div>
+          <span style={{flex:1,fontSize:14,textDecoration:'line-through'}}>{t.title}</span>
+          <button onClick={()=>del(t.id)} style={{background:'none',border:'none',color:'#333',fontSize:16,cursor:'pointer',padding:'0 4px'}}>×</button>
         </div>
-      );
-    })}
+      ))}
+    </>}
+
+    {pending.length===0 && done.length===0 && <div style={{textAlign:'center',padding:48,color:'#555',fontSize:14}}>No tasks yet. Type above and press enter.</div>}
   </>;
 }
 
-function InvoicePreview({ time, invoices, client, onCreate }) {
-  const unbilled = time.filter(t => t.status === 'unbilled' && t.client === client);
-  const totalHrs = unbilled.reduce((s, t) => s + parseFloat(t.hours), 0);
-  if (!unbilled.length) return <div className="text-center py-8" style={{ color:'#555' }}>No unbilled hours for {client}</div>;
-  
-  return (
-    <div>
-      <div className="rounded-lg p-5 my-3" style={{ background:'#0a0a0a', border:'1px solid #1e1e1e' }}>
-        <div style={{ fontFamily:'var(--mono)', fontWeight:700, fontSize:14, color:'#fff', letterSpacing:2 }}>BLUNT HEALTH ADVISORY LLC</div>
-        <div style={{ fontFamily:'var(--mono)', fontSize:10, color:'#666', marginTop:4 }}>Invoice BHA-{String(invoices.length + 1).padStart(3, '0')} | {new Date().toLocaleDateString()} | Net 30</div>
-        <div style={{ fontSize:12, color:'#888', marginTop:8 }}>Bill to: {client}</div>
-        <table className="w-full mt-3" style={{ borderCollapse:'collapse' }}>
-          <thead><tr>{['Date','Description','Hrs','Amount'].map(h => <Th key={h}>{h}</Th>)}</tr></thead>
-          <tbody>
-            {unbilled.map((t, i) => (
-              <tr key={i}><Td>{t.date?.split('T')[0]}</Td><Td>{t.description}</Td><TdR>{parseFloat(t.hours).toFixed(1)}</TdR><TdR>${(parseFloat(t.hours) * RATE).toFixed(2)}</TdR></tr>
-            ))}
-            <tr style={{ borderTop:'2px solid #333' }}>
-              <td colSpan={2} className="font-bold text-sm p-2">TOTAL DUE</td>
-              <TdR className="font-bold">{totalHrs.toFixed(1)}</TdR>
-              <td className="font-bold text-right p-2" style={{ fontFamily:'var(--mono)', fontSize:15, color:'var(--red)' }}>${(totalHrs * RATE).toFixed(2)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <SubmitBtn color="var(--red)" onClick={onCreate}>APPROVE & MARK INVOICED</SubmitBtn>
+/* ============ INVOICE PREVIEW ============ */
+function InvPreview({ time, invoices, client, onCreate }) {
+  const ub = time.filter(t=>t.status==='unbilled'&&t.client===client);
+  const th = ub.reduce((s,t)=>s+parseFloat(t.hours),0);
+  if (!ub.length) return <div style={{textAlign:'center',padding:20,color:'#666'}}>No unbilled hours for {client}</div>;
+  return <div>
+    <div style={{background:'#0a0a0a',border:'1px solid #222',borderRadius:8,padding:20,margin:'12px 0'}}>
+      <div style={{fontFamily:'monospace',fontWeight:700,fontSize:14,color:'#fff',letterSpacing:2}}>BLUNT HEALTH ADVISORY LLC</div>
+      <div style={{fontFamily:'monospace',fontSize:10,color:'#888',marginTop:4}}>Invoice BHA-{String(invoices.length+1).padStart(3,'0')} | {new Date().toLocaleDateString()} | Net 30</div>
+      <div style={{fontSize:12,color:'#aaa',marginTop:8}}>Bill to: {client}</div>
+      <table style={{width:'100%',marginTop:12,borderCollapse:'collapse'}}>
+        <thead><tr>{['Date','Description','Hrs','Amount'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
+        <tbody>
+          {ub.map((t,i)=><tr key={i}><Td>{(t.date||'').split('T')[0]}</Td><Td>{t.description}</Td><TdR>{parseFloat(t.hours).toFixed(1)}</TdR><TdR>${(parseFloat(t.hours)*RATE).toFixed(2)}</TdR></tr>)}
+          <tr style={{borderTop:'2px solid #333'}}><td colSpan={2} style={{padding:8,fontWeight:700,fontSize:13,color:'#fff'}}>TOTAL DUE</td><TdR style={{fontWeight:700}}>{th.toFixed(1)}</TdR><td style={{padding:8,textAlign:'right',fontWeight:700,fontFamily:'monospace',fontSize:16,color:'#e85d45'}}>${(th*RATE).toFixed(2)}</td></tr>
+        </tbody>
+      </table>
     </div>
-  );
+    <button onClick={onCreate} style={{width:'100%',padding:14,background:'#b03a2e',border:'none',color:'#fff',borderRadius:6,fontFamily:'monospace',fontSize:12,fontWeight:700,letterSpacing:2}}>APPROVE & MARK INVOICED</button>
+  </div>;
 }
 
-// Shared components
-function Card({ children, className = '' }) {
-  return <div className={`rounded-lg p-4 ${className}`} style={{ background:'var(--card)', border:'1px solid var(--border)' }}>{children}</div>;
-}
-function Label({ children, className = '' }) {
-  return <div className={className} style={{ fontFamily:'var(--mono)', fontSize:9, fontWeight:600, letterSpacing:2, color:'#555', marginBottom:10 }}>{children}</div>;
-}
-function BigNum({ children, style = {} }) {
-  return <div style={{ fontSize:30, fontWeight:700, fontFamily:'var(--mono)', color:'#fff', ...style }}>{children}</div>;
-}
-function Unit({ children }) {
-  return <span style={{ fontSize:13, fontWeight:400, color:'#666' }}>{children}</span>;
-}
-function Sub({ children, className = '' }) {
-  return <div className={className} style={{ fontSize:12, color:'#555', marginTop:3 }}>{children}</div>;
-}
-function Badge({ children, color }) {
-  return <span style={{ fontFamily:'var(--mono)', fontSize:8, fontWeight:700, letterSpacing:1, padding:'2px 8px', borderRadius:3, background:`${color}18`, color, flexShrink:0 }}>{children}</span>;
-}
-function EntityTag({ entity }) {
-  const colors = { 'Findr Health':'var(--findr)', 'BHA':'var(--bha)', 'Cabin/STR':'var(--cabin)', 'Personal':'#777', 'Shared':'#777' };
-  const c = colors[entity] || '#777';
-  return <span style={{ fontFamily:'var(--mono)', fontSize:9, padding:'2px 8px', borderRadius:3, background:`${c}18`, color:c }}>{entity}</span>;
-}
-function StatusTag({ status }) {
-  const c = status === 'unbilled' ? 'var(--bha)' : status === 'sent' ? '#6a9bd8' : 'var(--findr)';
-  return <span style={{ fontFamily:'var(--mono)', fontSize:9, padding:'2px 8px', borderRadius:3, background:`${c}18`, color:c }}>{status}</span>;
-}
-function Th({ children }) {
-  return <th style={{ fontFamily:'var(--mono)', fontSize:9, fontWeight:600, letterSpacing:1, color:'#444', textAlign:'left', padding:'8px 10px', borderBottom:'1px solid #1e1e1e' }}>{children}</th>;
-}
-function Td({ children }) {
-  return <td style={{ fontSize:12, padding:'9px 10px', color:'#bbb' }}>{children}</td>;
-}
-function TdR({ children, className = '' }) {
-  return <td className={className} style={{ fontSize:12, padding:'9px 10px', color:'#bbb', textAlign:'right', fontFamily:'var(--mono)' }}>{children}</td>;
-}
-function ModalTitle({ children }) {
-  return <div style={{ fontFamily:'var(--mono)', fontSize:13, fontWeight:700, color:'#fff', marginBottom:18, letterSpacing:2 }}>{children}</div>;
-}
-function Input(props) {
-  return <input {...props} className="w-full rounded mb-2.5 outline-none" style={{ background:'#0a0a0a', border:'1px solid #1e1e1e', padding:'10px 12px', color:'#ddd', fontSize:13 }} />;
-}
-function Select({ value, onChange, options }) {
-  return <select value={value} onChange={onChange} className="w-full rounded mb-2.5 outline-none" style={{ background:'#0a0a0a', border:'1px solid #1e1e1e', padding:'10px 12px', color:'#ddd', fontSize:13 }}>
-    {options.map(o => <option key={o}>{o}</option>)}
-  </select>;
-}
-function SubmitBtn({ children, color, onClick }) {
-  return <button onClick={onClick} className="w-full py-3 rounded border-none text-white cursor-pointer mt-1" style={{ background:color, fontFamily:'var(--mono)', fontSize:12, fontWeight:700, letterSpacing:2 }}>{children}</button>;
-}
+/* ============ SHARED COMPONENTS ============ */
+function Card({children,style={},onClick}) { return <div onClick={onClick} style={{background:'#111',border:'1px solid #222',borderRadius:8,padding:18,...style}}>{children}</div>; }
+function Lbl({children,style={}}) { return <div style={{fontFamily:'monospace',fontSize:9,fontWeight:600,letterSpacing:2,color:'#888',marginBottom:10,...style}}>{children}</div>; }
+function Big({children,style={}}) { return <div style={{fontSize:30,fontWeight:700,fontFamily:'monospace',color:'#fff',...style}}>{children}</div>; }
+function Sm({children}) { return <span style={{fontSize:13,fontWeight:400,color:'#888'}}>{children}</span>; }
+function Sub({children}) { return <div style={{fontSize:12,color:'#888',marginTop:3}}>{children}</div>; }
+function Badge({children,c}) { return <span style={{fontFamily:'monospace',fontSize:8,fontWeight:700,letterSpacing:1,padding:'2px 8px',borderRadius:3,background:`${c}20`,color:c,flexShrink:0}}>{children}</span>; }
+function Btn({children,c,onClick}) { return <button onClick={onClick} style={{background:c,border:'none',color:'#fff',fontFamily:'monospace',fontSize:10,fontWeight:600,letterSpacing:1,padding:'8px 16px',borderRadius:5}}>{children}</button>; }
+function Fbtn({children,active,onClick}) { return <button onClick={onClick} style={{background:active?'#222':'transparent',border:'1px solid #282828',borderRadius:4,padding:'5px 12px',color:active?'#fff':'#777',fontFamily:'monospace',fontSize:9,letterSpacing:1,cursor:'pointer'}}>{children}</button>; }
+function Th({children}) { return <th style={{fontFamily:'monospace',fontSize:9,fontWeight:600,letterSpacing:1,color:'#666',textAlign:'left',padding:'8px 10px',borderBottom:'1px solid #222'}}>{children}</th>; }
+function Td({children,c='#bbb',style={}}) { return <td style={{fontSize:12,padding:'9px 10px',color:c,...style}}>{children}</td>; }
+function TdR({children,style={}}) { return <td style={{fontSize:12,padding:'9px 10px',color:'#ccc',textAlign:'right',fontFamily:'monospace',...style}}>{children}</td>; }
+function Etag({e}) { const c={'Findr Health':'#5a9e6f','BHA':'#e2a832','Cabin/STR':'#8B6914','Shared':'#888','Personal':'#888'}[e]||'#888'; return <span style={{fontFamily:'monospace',fontSize:9,padding:'2px 8px',borderRadius:3,background:`${c}20`,color:c}}>{e}</span>; }
+function Stag({s}) { const c=s==='unbilled'?'#e2a832':s==='sent'?'#6a9bd8':s==='paid'?'#5a9e6f':'#888'; return <span style={{fontFamily:'monospace',fontSize:9,padding:'2px 8px',borderRadius:3,background:`${c}20`,color:c}}>{s}</span>; }
+function Mtitle({children}) { return <div style={{fontFamily:'monospace',fontSize:13,fontWeight:700,color:'#fff',marginBottom:18,letterSpacing:2}}>{children}</div>; }
+function Minput(props) { return <input {...props} style={{width:'100%',background:'#0a0a0a',border:'1px solid #222',borderRadius:6,padding:'10px 12px',color:'#ddd',fontSize:13,marginBottom:10,outline:'none'}} />; }
+function Mselect({value,onChange,opts}) { return <select value={value} onChange={onChange} style={{width:'100%',background:'#0a0a0a',border:'1px solid #222',borderRadius:6,padding:'10px 12px',color:'#ddd',fontSize:13,marginBottom:10,outline:'none'}}>{opts.map(o=><option key={o}>{o}</option>)}</select>; }
+const qi = {background:'#0c0c0c',border:'1px solid #282828',borderRadius:4,padding:'8px 10px',color:'#ddd',fontSize:12,outline:'none',flex:1,minWidth:80};
