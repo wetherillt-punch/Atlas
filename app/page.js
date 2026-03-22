@@ -60,6 +60,15 @@ export default function Home() {
     setModal(null); sf({});
   }
 
+  async function editExpense() {
+    if (!f.vendor || !f.amount || !f.editId) return;
+    const body = { id:f.editId, date:f.date, vendor:f.vendor, amount:parseFloat(f.amount), entity:f.entity, category:f.category };
+    const r = await fetch('/api/expenses', { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const updated = await r.json();
+    setExpenses(expenses.map(e => e.id === f.editId ? updated : e));
+    setModal(null); sf({});
+  }
+
   async function addTime() {
     if (!f.hours || !f.desc) return;
     const r = await fetch('/api/time', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ date:f.date||today(), client:f.client||'ATRIO Health Plans', description:f.desc, hours:parseFloat(f.hours) }) });
@@ -105,6 +114,11 @@ export default function Home() {
     setTasks(tasks.filter(t => t.id !== id));
   }
 
+  function openEditExpense(e) {
+    sf({ editId:e.id, date:(e.date||'').split('T')[0], vendor:e.vendor, amount:parseFloat(e.amount), entity:e.entity, category:e.category });
+    setModal('edit-exp');
+  }
+
   const today = () => new Date().toISOString().split('T')[0];
   const sumE = (ent) => expenses.filter(e=>e.entity===ent).reduce((s,e)=>s+parseFloat(e.amount),0);
   const unbH = time.filter(t=>t.status==='unbilled').reduce((s,t)=>s+parseFloat(t.hours),0);
@@ -122,7 +136,6 @@ export default function Home() {
       <style>{`*{box-sizing:border-box;margin:0;padding:0}button{cursor:pointer}input,select{font-family:inherit}
       ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#333;border-radius:3px}`}</style>
 
-      {/* NAV */}
       <nav style={{display:'flex',alignItems:'center',padding:'12px 20px',borderBottom:'1px solid #222',background:'#0a0a0a',flexWrap:'wrap',gap:8}}>
         <div style={{fontFamily:'monospace',fontWeight:700,fontSize:16,letterSpacing:5,marginRight:20,display:'flex',gap:8,alignItems:'center'}}>
           <span style={{color:'#e85d45'}}>▲</span><span style={{color:'#fff'}}>ATLAS</span>
@@ -138,9 +151,7 @@ export default function Home() {
 
       <div style={{maxWidth:1100,margin:'0 auto',padding:24}}>
 
-      {/* ========== DASHBOARD ========== */}
       {tab==='dash' && <>
-        {/* Flagged tasks — real tasks you can complete */}
         {flaggedTasks.length>0 && (
           <Card style={{borderLeft:'3px solid #e85d45',marginBottom:16}}>
             <Lbl>NEEDS ATTENTION</Lbl>
@@ -154,9 +165,7 @@ export default function Home() {
             <div onClick={()=>setTab('tasks')} style={{fontSize:13,color:'#888',marginTop:10,cursor:'pointer'}}>View all tasks →</div>
           </Card>
         )}
-
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',gap:16}}>
-          {/* Findr */}
           <Card style={{cursor:'pointer'}} onClick={()=>setTab('exp')}>
             <Lbl>FINDR HEALTH</Lbl>
             <Big>${(sumE('Findr Health')+sumE('Shared')*0.4).toFixed(0)} <Sm>YTD</Sm></Big>
@@ -166,8 +175,6 @@ export default function Home() {
               <div key={i} style={{marginTop:12,fontSize:13,color:'#e85d45'}}>→ {t.title}</div>
             ))}
           </Card>
-
-          {/* BHA */}
           <Card style={{cursor:'pointer'}} onClick={()=>setTab('bha')}>
             <Lbl>BLUNT HEALTH ADVISORY</Lbl>
             {unbH>0 ? <>
@@ -179,8 +186,6 @@ export default function Home() {
               <div key={i} style={{marginTop:12,fontSize:13,color:'#e85d45'}}>→ {t.title}</div>
             ))}
           </Card>
-
-          {/* Cabin */}
           <Card>
             <Lbl>WILSALL CABIN / STR</Lbl>
             <Big>${cabinCarryYTD.toLocaleString()} <Sm>YTD carry</Sm></Big>
@@ -191,15 +196,9 @@ export default function Home() {
               <div key={i} style={{marginTop:12,fontSize:13,color:'#e85d45'}}>→ {t.title}</div>
             ))}
           </Card>
-
-          {/* Summary */}
           <Card>
             <Lbl>SUMMARY</Lbl>
-            {[
-              ['All entities YTD',`$${Math.round(expenses.reduce((s,e)=>s+parseFloat(e.amount),0) + cabinCarryYTD).toLocaleString()}`],
-              ['Startup costs/mo','~$209'],
-              ['Cabin carry/mo','$3,370'],
-            ].map(([l,v],i)=>(
+            {[['All entities YTD',`$${Math.round(expenses.reduce((s,e)=>s+parseFloat(e.amount),0)+cabinCarryYTD).toLocaleString()}`],['Startup costs/mo','~$209'],['Cabin carry/mo','$3,370']].map(([l,v],i)=>(
               <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',fontSize:14,borderBottom:'1px solid #1a1a1a',color:'#ccc'}}>
                 <span>{l}</span><span style={{fontWeight:600,fontFamily:'monospace'}}>{v}</span>
               </div>
@@ -213,18 +212,13 @@ export default function Home() {
         </div>
       </>}
 
-      {/* ========== EXPENSES ========== */}
-      {tab==='exp' && <ExpensesTab expenses={expenses} del={delExpense} add={addExpense} />}
-
-      {/* ========== BHA ========== */}
+      {tab==='exp' && <ExpensesTab expenses={expenses} del={delExpense} add={addExpense} edit={openEditExpense} />}
       {tab==='bha' && <BHATab time={time} invoices={invoices} unbH={unbH} unbA={unbA} setModal={setModal} sf={sf} markPaid={markPaid} today={today} />}
-
-      {/* ========== TASKS ========== */}
       {tab==='tasks' && <TasksTab tasks={tasks} toggle={toggleTask} add={addTask} clearDone={clearDone} del={delTask} />}
 
       </div>
 
-      {/* ========== MODALS ========== */}
+      {/* MODALS */}
       {modal && <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}} onClick={()=>setModal(null)}>
         <div style={{background:'#111',border:'1px solid #282828',borderRadius:10,padding:28,width:'100%',maxWidth:480,maxHeight:'90vh',overflow:'auto'}} onClick={e=>e.stopPropagation()}>
           {modal==='exp' && <>
@@ -235,6 +229,16 @@ export default function Home() {
             <Mselect value={f.entity||'Findr Health'} onChange={e=>sf({...f,entity:e.target.value})} opts={ENTITIES} />
             <Mselect value={f.category||'Other'} onChange={e=>sf({...f,category:e.target.value})} opts={CATEGORIES} />
             <Mbtn c="#2d6b45" onClick={()=>addExpense()}>LOG EXPENSE</Mbtn>
+          </>}
+          {modal==='edit-exp' && <>
+            <Mtitle>Edit Expense</Mtitle>
+            <Minput type="date" value={f.date||''} onChange={e=>sf({...f,date:e.target.value})} />
+            <Minput placeholder="Vendor" value={f.vendor||''} onChange={e=>sf({...f,vendor:e.target.value})} autoFocus />
+            <Minput placeholder="Amount" type="number" step="0.01" value={f.amount||''} onChange={e=>sf({...f,amount:e.target.value})} />
+            <Mselect value={f.entity||'Findr Health'} onChange={e=>sf({...f,entity:e.target.value})} opts={ENTITIES} />
+            <Mselect value={f.category||'Other'} onChange={e=>sf({...f,category:e.target.value})} opts={CATEGORIES} />
+            <Mbtn c="#2d6b45" onClick={editExpense}>SAVE CHANGES</Mbtn>
+            <button onClick={()=>{delExpense(f.editId);setModal(null);sf({})}} style={{width:'100%',padding:12,background:'none',border:'1px solid #333',color:'#888',borderRadius:6,fontFamily:'monospace',fontSize:12,letterSpacing:1,marginTop:8,cursor:'pointer'}}>DELETE EXPENSE</button>
           </>}
           {modal==='hrs' && <>
             <Mtitle>Log BHA Hours</Mtitle>
@@ -257,7 +261,7 @@ export default function Home() {
 }
 
 /* ============ EXPENSES TAB ============ */
-function ExpensesTab({ expenses, del, add }) {
+function ExpensesTab({ expenses, del, add, edit }) {
   const [filter, setFilter] = useState('All');
   const [dateRange, setDateRange] = useState('all');
   const [qv, setQv] = useState('');
@@ -285,11 +289,30 @@ function ExpensesTab({ expenses, del, add }) {
     inputRef.current?.focus();
   }
 
+  function exportCSV() {
+    const header = 'Date,Vendor,Amount,Entity,Category\n';
+    const rows = filtered.map(e => 
+      `${(e.date||'').split('T')[0]},"${e.vendor}",${parseFloat(e.amount).toFixed(2)},${e.entity},${e.category}`
+    ).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const label = filter === 'All' ? 'all' : filter.replace(/[\s\/]/g, '-').toLowerCase();
+    const range = dateRange === 'this' ? thisMonth : dateRange === 'last' ? lastMonth : 'all-time';
+    a.href = url;
+    a.download = `atlas-expenses-${label}-${range}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return <>
-    <div style={{marginBottom:18}}>
-      <span style={{fontSize:18,fontWeight:700,color:'#fff'}}>{now.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</span>
-      <span style={{fontSize:14,color:'#aaa',marginLeft:10}}>— ${monthTotal.toFixed(2)} ({expenses.filter(e=>(e.date||'').startsWith(thisMonth)).length} transactions)</span>
-      <span style={{fontSize:14,color:'#666',marginLeft:10}}>| YTD: ${ytdTotal.toFixed(2)}</span>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:18,flexWrap:'wrap',gap:8}}>
+      <div>
+        <span style={{fontSize:18,fontWeight:700,color:'#fff'}}>{now.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</span>
+        <span style={{fontSize:14,color:'#aaa',marginLeft:10}}>— ${monthTotal.toFixed(2)} ({expenses.filter(e=>(e.date||'').startsWith(thisMonth)).length} transactions)</span>
+        <span style={{fontSize:14,color:'#666',marginLeft:10}}>| YTD: ${ytdTotal.toFixed(2)}</span>
+      </div>
+      <button onClick={exportCSV} style={{background:'none',border:'1px solid #333',borderRadius:5,padding:'8px 16px',color:'#aaa',fontFamily:'monospace',fontSize:11,letterSpacing:1,cursor:'pointer'}}>EXPORT CSV ↓</button>
     </div>
 
     <div style={{display:'flex',gap:8,marginBottom:18,padding:14,background:'#151515',borderRadius:8,border:'1px solid #222',alignItems:'center',flexWrap:'wrap'}}>
@@ -313,13 +336,13 @@ function ExpensesTab({ expenses, del, add }) {
     <table style={{width:'100%',borderCollapse:'collapse'}}>
       <thead><tr>{['Date','Vendor','Amount','Entity','Category',''].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
       <tbody>{filtered.map(e=>(
-        <tr key={e.id} style={{borderBottom:'1px solid #1a1a1a'}}>
+        <tr key={e.id} onClick={()=>edit(e)} style={{borderBottom:'1px solid #1a1a1a',cursor:'pointer',transition:'background 0.1s'}} onMouseEnter={ev=>ev.currentTarget.style.background='#181818'} onMouseLeave={ev=>ev.currentTarget.style.background='transparent'}>
           <Td>{(e.date||'').split('T')[0]}</Td>
           <Td c="#ddd">{e.vendor}</Td>
           <TdR>${parseFloat(e.amount).toFixed(2)}</TdR>
           <Td><Etag e={e.entity}/></Td>
           <Td>{e.category}</Td>
-          <TdR><button onClick={()=>del(e.id)} style={{background:'none',border:'none',color:'#444',fontSize:16,cursor:'pointer',padding:'2px 6px'}}>×</button></TdR>
+          <TdR><span style={{color:'#333',fontSize:13}}>edit</span></TdR>
         </tr>
       ))}</tbody>
     </table>
@@ -367,7 +390,6 @@ function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, today }) {
         {unbH>0 && <Btn c="#b03a2e" onClick={()=>{setModal('inv');sf({})}}>GENERATE INVOICE</Btn>}
       </div>
     </div>
-
     <Lbl>TIME ENTRIES</Lbl>
     <table style={{width:'100%',borderCollapse:'collapse',marginTop:10}}>
       <thead><tr>{['Date','Client','Description','Hours','Amount','Status'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
@@ -382,7 +404,6 @@ function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, today }) {
         {time.length===0 && <tr><td colSpan={6} style={{textAlign:'center',padding:48,color:'#777',fontSize:15}}>No hours logged. Click "+ LOG HOURS" to start tracking.</td></tr>}
       </tbody>
     </table>
-
     {invoices.length>0 && <>
       <Lbl style={{marginTop:36}}>INVOICES</Lbl>
       <table style={{width:'100%',borderCollapse:'collapse',marginTop:10}}>
@@ -406,7 +427,7 @@ function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, today }) {
   </>;
 }
 
-/* ============ TASKS — PAPER LIST ============ */
+/* ============ TASKS ============ */
 function TasksTab({ tasks, toggle, add, clearDone, del }) {
   const [input, setInput] = useState('');
   const [project, setProject] = useState('');
@@ -432,7 +453,6 @@ function TasksTab({ tasks, toggle, add, clearDone, del }) {
       </select>
       {done.length>0 && <button onClick={clearDone} style={{background:'none',border:'1px solid #333',borderRadius:6,padding:'10px 18px',color:'#888',fontFamily:'monospace',fontSize:11,letterSpacing:1,cursor:'pointer',whiteSpace:'nowrap'}}>CLEAR DONE ({done.length})</button>}
     </div>
-
     {pending.map(t=>(
       <div key={t.id} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 0',borderBottom:'1px solid #1a1a1a'}}>
         <div onClick={()=>toggle(t.id,t.done)} style={{width:22,height:22,borderRadius:4,border:'2px solid #555',cursor:'pointer',flexShrink:0}} />
@@ -441,7 +461,6 @@ function TasksTab({ tasks, toggle, add, clearDone, del }) {
         <button onClick={()=>del(t.id)} style={{background:'none',border:'none',color:'#333',fontSize:18,cursor:'pointer',padding:'0 6px'}}>×</button>
       </div>
     ))}
-
     {done.length>0 && <>
       <div style={{marginTop:28,marginBottom:10,fontFamily:'monospace',fontSize:12,letterSpacing:2,color:'#666'}}>COMPLETED</div>
       {done.map(t=>(
@@ -452,7 +471,6 @@ function TasksTab({ tasks, toggle, add, clearDone, del }) {
         </div>
       ))}
     </>}
-
     {pending.length===0 && done.length===0 && <div style={{textAlign:'center',padding:56,color:'#666',fontSize:16}}>No tasks. Type above and press enter.</div>}
   </>;
 }
@@ -479,7 +497,7 @@ function InvPreview({ time, invoices, client, onCreate }) {
   </div>;
 }
 
-/* ============ SHARED COMPONENTS ============ */
+/* ============ SHARED ============ */
 function Card({children,style={},onClick}) { return <div onClick={onClick} style={{background:'#111',border:'1px solid #222',borderRadius:8,padding:20,...style}}>{children}</div>; }
 function Lbl({children,style={}}) { return <div style={{fontFamily:'monospace',fontSize:12,fontWeight:600,letterSpacing:2,color:'#888',marginBottom:12,...style}}>{children}</div>; }
 function Big({children,style={}}) { return <div style={{fontSize:32,fontWeight:700,fontFamily:'monospace',color:'#fff',...style}}>{children}</div>; }
