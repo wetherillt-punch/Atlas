@@ -94,6 +94,25 @@ export default function Home() {
     setExpenses(expenses.filter(e => e.id !== id));
   }
 
+  async function editTime() {
+    if (!f.desc || !f.hours || !f.editTimeId) return;
+    const body = { id:f.editTimeId, date:f.date, client:f.client, description:f.desc, hours:parseFloat(f.hours), rate:parseFloat(f.rate)||DEFAULT_RATE };
+    const r = await fetch('/api/time', { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const updated = await r.json();
+    setTime(time.map(t => t.id === f.editTimeId ? updated : t));
+    setModal(null); sf({});
+  }
+
+  async function delTime(id) {
+    await fetch(`/api/time?id=${id}`, { method:'DELETE' });
+    setTime(time.filter(t => t.id !== id));
+  }
+
+  function openEditTime(t) {
+    sf({ editTimeId:t.id, date:(t.date||'').split('T')[0], client:t.client, desc:t.description, hours:parseFloat(t.hours), rate:parseFloat(t.rate||DEFAULT_RATE) });
+    setModal('edit-time');
+  }
+
   async function addTask(title, project) {
     if (!title.trim()) return;
     const r = await fetch('/api/tasks', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ title, project: project || null }) });
@@ -229,7 +248,7 @@ export default function Home() {
       </>}
 
       {tab==='exp' && <ExpensesTab expenses={expenses} del={delExpense} add={addExpense} edit={openEditExpense} />}
-      {tab==='bha' && <BHATab time={time} invoices={invoices} unbH={unbH} unbA={unbA} setModal={setModal} sf={sf} markPaid={markPaid} updateStatus={updateInvoiceStatus} deleteInvoice={deleteInvoice} today={today} />}
+      {tab==='bha' && <BHATab time={time} invoices={invoices} unbH={unbH} unbA={unbA} setModal={setModal} sf={sf} markPaid={markPaid} updateStatus={updateInvoiceStatus} deleteInvoice={deleteInvoice} editEntry={openEditTime} today={today} />}
       {tab==='tasks' && <TasksTab tasks={tasks} toggle={toggleTask} add={addTask} clearDone={clearDone} del={delTask} />}
 
       </div>
@@ -267,6 +286,19 @@ export default function Home() {
             </div>
             <div style={{fontFamily:'monospace',fontSize:14,color:'#e2a832',textAlign:'right',padding:'4px 0 12px'}}>${f.rate||DEFAULT_RATE}/hr × {f.hours||0} = ${((f.hours||0)*(f.rate||DEFAULT_RATE)).toFixed(2)}</div>
             <Mbtn c="#8B6914" onClick={addTime}>LOG HOURS</Mbtn>
+          </>}
+          {modal==='edit-time' && <>
+            <Mtitle>Edit Time Entry</Mtitle>
+            <Minput type="date" value={f.date||''} onChange={e=>sf({...f,date:e.target.value})} />
+            <Mselect value={f.client||'ATRIO Health Plans'} onChange={e=>sf({...f,client:e.target.value})} opts={CLIENTS} />
+            <Minput placeholder="Description of work" value={f.desc||''} onChange={e=>sf({...f,desc:e.target.value})} autoFocus />
+            <div style={{display:'flex',gap:10}}>
+              <div style={{flex:1}}><Minput placeholder="Hours" type="number" step="0.5" value={f.hours||''} onChange={e=>sf({...f,hours:e.target.value})} /></div>
+              <div style={{width:130}}><Minput placeholder="Rate" type="number" step="1" value={f.rate||DEFAULT_RATE} onChange={e=>sf({...f,rate:e.target.value})} /></div>
+            </div>
+            <div style={{fontFamily:'monospace',fontSize:14,color:'#e2a832',textAlign:'right',padding:'4px 0 12px'}}>${f.rate||DEFAULT_RATE}/hr × {f.hours||0} = ${((f.hours||0)*(f.rate||DEFAULT_RATE)).toFixed(2)}</div>
+            <Mbtn c="#8B6914" onClick={editTime}>SAVE CHANGES</Mbtn>
+            <button onClick={()=>{delTime(f.editTimeId);setModal(null);sf({})}} style={{width:'100%',padding:12,background:'none',border:'1px solid #333',color:'#888',borderRadius:6,fontFamily:'monospace',fontSize:12,letterSpacing:1,marginTop:8,cursor:'pointer'}}>DELETE TIME ENTRY</button>
           </>}
           {modal==='inv' && <>
             <Mtitle>Generate Invoice</Mtitle>
@@ -396,7 +428,7 @@ function ExpensesTab({ expenses, del, add, edit }) {
 }
 
 /* ============ BHA TAB ============ */
-function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, updateStatus, deleteInvoice, today }) {
+function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, updateStatus, deleteInvoice, editEntry, today }) {
   const outstandingAmt = invoices.filter(i=>i.status==='sent').reduce((s,i)=>s+parseFloat(i.amount),0);
   const collectedAmt = invoices.filter(i=>i.status==='paid').reduce((s,i)=>s+parseFloat(i.amount),0);
   const [editingInv, setEditingInv] = useState(null);
@@ -438,16 +470,17 @@ function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, updateStat
     </div>
     <Lbl>TIME ENTRIES</Lbl>
     <table style={{width:'100%',borderCollapse:'collapse',marginTop:10}}>
-      <thead><tr>{['Date','Client','Description','Hours','Rate','Amount','Status'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
+      <thead><tr>{['Date','Client','Description','Hours','Rate','Amount','Status',''].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
       <tbody>
         {time.map(t=>(
-          <tr key={t.id} style={{borderBottom:'1px solid #1a1a1a'}}>
+          <tr key={t.id} onClick={()=>editEntry(t)} style={{borderBottom:'1px solid #1a1a1a',cursor:'pointer',transition:'background 0.1s'}} onMouseEnter={ev=>ev.currentTarget.style.background='#181818'} onMouseLeave={ev=>ev.currentTarget.style.background='transparent'}>
             <Td>{(t.date||'').split('T')[0]}</Td><Td c="#ddd">{t.client}</Td><Td>{t.description}</Td>
             <TdR>{parseFloat(t.hours).toFixed(1)}</TdR><TdR>${parseFloat(t.rate||DEFAULT_RATE).toFixed(0)}</TdR><TdR>${(parseFloat(t.hours)*parseFloat(t.rate||DEFAULT_RATE)).toFixed(2)}</TdR>
             <Td><Stag s={t.status}/></Td>
+            <TdR><span style={{color:'#333',fontSize:13}}>edit</span></TdR>
           </tr>
         ))}
-        {time.length===0 && <tr><td colSpan={7} style={{textAlign:'center',padding:48,color:'#777',fontSize:15}}>No hours logged. Click "+ LOG HOURS" to start tracking.</td></tr>}
+        {time.length===0 && <tr><td colSpan={8} style={{textAlign:'center',padding:48,color:'#777',fontSize:15}}>No hours logged. Click "+ LOG HOURS" to start tracking.</td></tr>}
       </tbody>
     </table>
     {invoices.length>0 && <>
