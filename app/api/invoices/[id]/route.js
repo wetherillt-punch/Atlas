@@ -16,5 +16,14 @@ export async function PATCH(request, { params }) {
   const { status } = await request.json();
   await sql`UPDATE invoices SET status=${status} WHERE id=${id}`;
   if (status === 'paid') await sql`UPDATE time_entries SET status='paid' WHERE invoice_id=${id}`;
+  if (status === 'sent') await sql`UPDATE time_entries SET status='invoiced' WHERE invoice_id=${id}`;
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(request, { params }) {
+  const sql = getDb();
+  const { id } = await params;
+  await sql`UPDATE time_entries SET status='unbilled', invoice_id=NULL WHERE invoice_id=${id}`;
+  await sql`DELETE FROM invoices WHERE id=${id}`;
   return NextResponse.json({ ok: true });
 }
