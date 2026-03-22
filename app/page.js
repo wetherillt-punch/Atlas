@@ -180,7 +180,7 @@ export default function Home() {
             {unbH>0 ? <>
               <Big style={{color:'#e2a832'}}>${unbA.toFixed(0)} <Sm>unbilled</Sm></Big>
               <Sub>{unbH} hrs @ ${RATE}/hr</Sub>
-            </> : <div style={{fontSize:15,color:'#777',padding:'8px 0'}}>No hours logged</div>}
+            </> : <div style={{fontSize:15,color:'#777',padding:'8px 0'}}>{time.length > 0 ? 'No unbilled hours' : 'No hours logged'}</div>}
             {invoices.reduce((s,i)=>s+parseFloat(i.amount),0)>0 && <Sub>Invoiced YTD: ${invoices.reduce((s,i)=>s+parseFloat(i.amount),0).toFixed(0)}</Sub>}
             {openTasks.filter(t=>t.project==='BHA'&&!t.title.startsWith('⚑')).slice(0,1).map((t,i)=>(
               <div key={i} style={{marginTop:12,fontSize:13,color:'#e85d45'}}>→ {t.title}</div>
@@ -263,44 +263,38 @@ export default function Home() {
 /* ============ EXPENSES TAB ============ */
 function ExpensesTab({ expenses, del, add, edit }) {
   const [filter, setFilter] = useState('All');
-  const [dateRange, setDateRange] = useState('all');
-  const [qv, setQv] = useState('');
-  const [qa, setQa] = useState('');
-  const [qe, setQe] = useState('Findr Health');
-  const [qc, setQc] = useState('Other');
-  const inputRef = useRef(null);
-
-  const now = new Date();
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const lastMonth = now.getMonth()===0 ? `${now.getFullYear()-1}-12` : `${now.getFullYear()}-${String(now.getMonth()).padStart(2,'0')}`;
+  const [yearFilter, setYearFilter] = useState('all');
 
   let filtered = filter==='All' ? expenses : expenses.filter(e=>e.entity===filter);
-  if (dateRange==='this') filtered = filtered.filter(e=>(e.date||'').startsWith(thisMonth));
-  if (dateRange==='last') filtered = filtered.filter(e=>(e.date||'').startsWith(lastMonth));
+  if (yearFilter!=='all') filtered = filtered.filter(e=>(e.date||'').startsWith(yearFilter));
 
   const total = filtered.reduce((s,e)=>s+parseFloat(e.amount),0);
-  const monthTotal = expenses.filter(e=>(e.date||'').startsWith(thisMonth)).reduce((s,e)=>s+parseFloat(e.amount),0);
-  const ytdTotal = expenses.reduce((s,e)=>s+parseFloat(e.amount),0);
 
-  function quickAdd() {
-    if (!qv.trim()||!qa) return;
-    add({ date:new Date().toISOString().split('T')[0], vendor:qv.trim(), amount:parseFloat(qa), entity:qe, category:qc });
-    setQv(''); setQa('');
-    inputRef.current?.focus();
-  }
+  // Category summary for current filtered view
+  const catSummary = {};
+  filtered.forEach(e => {
+    const cat = e.category || 'Other';
+    catSummary[cat] = (catSummary[cat] || 0) + parseFloat(e.amount);
+  });
+  const catRows = Object.entries(catSummary).sort((a,b) => b[1] - a[1]);
 
   function exportCSV() {
-    const header = 'Date,Vendor,Amount,Entity,Category\n';
-    const rows = filtered.map(e => 
+    const entityLabel = filter === 'All' ? 'All Entities' : filter;
+    const yearLabel = yearFilter === 'all' ? 'All Time' : yearFilter;
+    let csv = `${entityLabel} — ${yearLabel} Expenses\n\n`;
+    csv += 'Date,Vendor,Amount,Entity,Category\n';
+    csv += filtered.map(e =>
       `${(e.date||'').split('T')[0]},"${e.vendor}",${parseFloat(e.amount).toFixed(2)},${e.entity},${e.category}`
     ).join('\n');
-    const blob = new Blob([header + rows], { type: 'text/csv' });
+    csv += '\n\n--- CATEGORY SUMMARY ---\nCategory,Total\n';
+    csv += catRows.map(([cat, amt]) => `${cat},$${amt.toFixed(2)}`).join('\n');
+    csv += `\n\nTOTAL,$${total.toFixed(2)}`;
+    const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const label = filter === 'All' ? 'all' : filter.replace(/[\s\/]/g, '-').toLowerCase();
-    const range = dateRange === 'this' ? thisMonth : dateRange === 'last' ? lastMonth : 'all-time';
+    const fname = `${(filter === 'All' ? 'all-entities' : filter.replace(/[\s\/]/g, '-').toLowerCase())}-${yearFilter === 'all' ? 'all-time' : yearFilter}-expenses.csv`;
     a.href = url;
-    a.download = `atlas-expenses-${label}-${range}.csv`;
+    a.download = fname;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -308,19 +302,11 @@ function ExpensesTab({ expenses, del, add, edit }) {
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:18,flexWrap:'wrap',gap:8}}>
       <div>
-        <span style={{fontSize:18,fontWeight:700,color:'#fff'}}>{now.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</span>
-        <span style={{fontSize:14,color:'#aaa',marginLeft:10}}>— ${monthTotal.toFixed(2)} ({expenses.filter(e=>(e.date||'').startsWith(thisMonth)).length} transactions)</span>
-        <span style={{fontSize:14,color:'#666',marginLeft:10}}>| YTD: ${ytdTotal.toFixed(2)}</span>
+        <span style={{fontSize:18,fontWeight:700,color:'#fff'}}>{filter === 'All' ? 'All Entities' : filter}</span>
+        <span style={{fontSize:14,color:'#aaa',marginLeft:10}}>— {yearFilter === 'all' ? 'All Time' : yearFilter}</span>
+        <span style={{fontSize:14,color:'#888',marginLeft:10}}>| {filtered.length} transactions | ${total.toFixed(2)}</span>
       </div>
       <button onClick={exportCSV} style={{background:'none',border:'1px solid #333',borderRadius:5,padding:'8px 16px',color:'#aaa',fontFamily:'monospace',fontSize:11,letterSpacing:1,cursor:'pointer'}}>EXPORT CSV ↓</button>
-    </div>
-
-    <div style={{display:'flex',gap:8,marginBottom:18,padding:14,background:'#151515',borderRadius:8,border:'1px solid #222',alignItems:'center',flexWrap:'wrap'}}>
-      <input ref={inputRef} placeholder="Vendor" value={qv} onChange={e=>setQv(e.target.value)} style={qi} onKeyDown={e=>e.key==='Enter'&&quickAdd()} />
-      <input placeholder="$" type="number" step="0.01" value={qa} onChange={e=>setQa(e.target.value)} style={{...qi,width:100}} onKeyDown={e=>e.key==='Enter'&&quickAdd()} />
-      <select value={qe} onChange={e=>setQe(e.target.value)} style={{...qi,width:140}}>{ENTITIES.map(e=><option key={e}>{e}</option>)}</select>
-      <select value={qc} onChange={e=>setQc(e.target.value)} style={{...qi,width:140}}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
-      <Btn c="#2d6b45" onClick={quickAdd}>ADD</Btn>
     </div>
 
     <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
@@ -328,8 +314,8 @@ function ExpensesTab({ expenses, del, add, edit }) {
         <Fbtn key={f} active={filter===f} onClick={()=>setFilter(f)}>{f}</Fbtn>
       ))}
       <div style={{width:1,height:22,background:'#333',margin:'0 6px'}}/>
-      {[['all','All Time'],['this','This Month'],['last','Last Month']].map(([k,l])=>(
-        <Fbtn key={k} active={dateRange===k} onClick={()=>setDateRange(k)}>{l}</Fbtn>
+      {[['all','All'],['2025','2025'],['2026','2026']].map(([k,l])=>(
+        <Fbtn key={k} active={yearFilter===k} onClick={()=>setYearFilter(k)}>{l}</Fbtn>
       ))}
     </div>
 
@@ -348,7 +334,29 @@ function ExpensesTab({ expenses, del, add, edit }) {
     </table>
     {filtered.length>0 && <div style={{textAlign:'right',padding:'14px 0',fontWeight:700,fontFamily:'monospace',fontSize:16,color:'#fff'}}>Total: ${total.toFixed(2)}</div>}
 
-    <div style={{marginTop:36,borderTop:'1px solid #222',paddingTop:20}}>
+    {/* Category summary — CPA view */}
+    {catRows.length>0 && (
+      <div style={{marginTop:20,marginBottom:36,borderTop:'1px solid #222',paddingTop:20}}>
+        <Lbl>CATEGORY SUMMARY</Lbl>
+        <table style={{width:'100%',maxWidth:400,borderCollapse:'collapse',marginTop:8}}>
+          <thead><tr><Th>Category</Th><Th>Total</Th></tr></thead>
+          <tbody>
+            {catRows.map(([cat,amt],i)=>(
+              <tr key={i} style={{borderBottom:'1px solid #1a1a1a'}}>
+                <Td c="#ddd">{cat}</Td>
+                <TdR>${amt.toFixed(2)}</TdR>
+              </tr>
+            ))}
+            <tr style={{borderTop:'2px solid #333'}}>
+              <td style={{padding:'11px 12px',fontSize:14,fontWeight:700,color:'#fff'}}>TOTAL</td>
+              <TdR style={{fontWeight:700,color:'#fff'}}>${total.toFixed(2)}</TdR>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    <div style={{marginTop:20,borderTop:'1px solid #222',paddingTop:20}}>
       <Lbl>ALL SERVICES — WHAT YOU'RE PAYING FOR</Lbl>
       <table style={{width:'100%',borderCollapse:'collapse',marginTop:10}}>
         <thead><tr>{['Service','Cost','Entity','Purpose'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
@@ -383,7 +391,7 @@ function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, today }) {
           <span style={{fontSize:32,fontWeight:700,fontFamily:'monospace',color:'#e2a832'}}>${unbA.toFixed(0)}</span>
           <span style={{color:'#bbb',marginLeft:10,fontSize:15}}>{unbH} hrs unbilled @ $250/hr</span>
           {thisWeekHrs>0 && <div style={{fontSize:14,color:'#999',marginTop:4}}>This week: {thisWeekHrs} hrs / ${(thisWeekHrs*RATE).toFixed(0)}</div>}
-        </> : <div style={{fontSize:16,color:'#888'}}>No hours logged yet</div>}
+        </> : <div style={{fontSize:16,color:'#888'}}>{time.length > 0 ? 'No unbilled hours' : 'No hours logged yet'}</div>}
       </div>
       <div style={{display:'flex',gap:8}}>
         <Btn c="#8B6914" onClick={()=>{setModal('hrs');sf({date:today()})}}>+ LOG HOURS</Btn>
