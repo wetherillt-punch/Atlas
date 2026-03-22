@@ -79,8 +79,8 @@ export default function InvoicePage() {
         <div style={{borderTop:'1px solid #eee',paddingTop:24}}>
           <div style={{fontSize:9,fontWeight:700,color:'#c0392b',letterSpacing:2,marginBottom:12}}>PAYMENT DETAILS</div>
           <div style={{fontSize:12,color:'#666',lineHeight:1.8}}>
-            <b>Payment by check or ACH transfer:</b><br/>Blunt Health Advisory LLC<br/>[Bank Name]<br/>Routing: [Routing Number]<br/>Account: [Account Number]<br/><br/>
-            <b>Or mail check to:</b><br/>311 North Willson Avenue, Apt 602<br/>Bozeman, MT 59715
+            <b>Payment by ACH transfer:</b><br/>Blunt Health Advisory LLC<br/>First Security Bank, Bozeman MT<br/>Routing: 292970825<br/>Account: 3300002899064<br/><br/>
+            <b>Or mail check to:</b><br/>Blunt Health Advisory LLC<br/>311 North Willson Avenue, Apt 602<br/>Bozeman, MT 59715
           </div>
         </div>
 
