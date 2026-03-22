@@ -8,7 +8,8 @@ export async function GET() {
 
 export async function POST(request) {
   const sql = getDb();
-  const { date, client, description, hours } = await request.json();
-  const rows = await sql`INSERT INTO time_entries (date,client,description,hours,rate,status) VALUES (${date},${client},${description},${hours},250,'unbilled') RETURNING *`;
+  const { date, client, description, hours, rate } = await request.json();
+  const r = rate || 275;
+  const rows = await sql`INSERT INTO time_entries (date,client,description,hours,rate,status) VALUES (${date},${client},${description},${hours},${r},'unbilled') RETURNING *`;
   return NextResponse.json(rows[0]);
 }

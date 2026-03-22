@@ -5,7 +5,7 @@ const ENTITIES = ['Findr Health','BHA','Cabin/STR','Personal','Shared'];
 const CATEGORIES = ['Hosting','Software','Contractor','Legal','Legal/IP','Legal/Filing','Domain','Equipment','Capital Improvement','Utilities','Financing','Office','Insurance','Travel','Other'];
 const CLIENTS = ['ATRIO Health Plans','P3 Health Partners','Other'];
 const PROJECTS = ['Findr Health','BHA','Cabin/STR'];
-const RATE = 250;
+const DEFAULT_RATE = 275;
 const CABIN_MONTHLY = 3370;
 
 const SERVICES = [
@@ -71,7 +71,8 @@ export default function Home() {
 
   async function addTime() {
     if (!f.hours || !f.desc) return;
-    const r = await fetch('/api/time', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ date:f.date||today(), client:f.client||'ATRIO Health Plans', description:f.desc, hours:parseFloat(f.hours) }) });
+    const rate = parseFloat(f.rate) || DEFAULT_RATE;
+    const r = await fetch('/api/time', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ date:f.date||today(), client:f.client||'ATRIO Health Plans', description:f.desc, hours:parseFloat(f.hours), rate }) });
     setTime([await r.json(), ...time]);
     setModal(null); sf({});
   }
@@ -133,7 +134,7 @@ export default function Home() {
   const exp2026 = expenses.filter(e=>(e.date||'').startsWith('2026'));
   const sumE26 = (ent) => exp2026.filter(e=>e.entity===ent).reduce((s,e)=>s+parseFloat(e.amount),0);
   const unbH = time.filter(t=>t.status==='unbilled').reduce((s,t)=>s+parseFloat(t.hours),0);
-  const unbA = unbH * RATE;
+  const unbA = time.filter(t=>t.status==='unbilled').reduce((s,t)=>s+parseFloat(t.hours)*parseFloat(t.rate||DEFAULT_RATE),0);
   const outstandingAmt = invoices.filter(i=>i.status==='sent').reduce((s,i)=>s+parseFloat(i.amount),0);
   const collectedAmt = invoices.filter(i=>i.status==='paid').reduce((s,i)=>s+parseFloat(i.amount),0);
   const openTasks = tasks.filter(t => !t.done);
@@ -260,8 +261,11 @@ export default function Home() {
             <Minput type="date" value={f.date||''} onChange={e=>sf({...f,date:e.target.value})} />
             <Mselect value={f.client||'ATRIO Health Plans'} onChange={e=>sf({...f,client:e.target.value})} opts={CLIENTS} />
             <Minput placeholder="Description of work" value={f.desc||''} onChange={e=>sf({...f,desc:e.target.value})} autoFocus />
-            <Minput placeholder="Hours" type="number" step="0.5" value={f.hours||''} onChange={e=>sf({...f,hours:e.target.value})} />
-            <div style={{fontFamily:'monospace',fontSize:14,color:'#e2a832',textAlign:'right',padding:'4px 0 12px'}}>${RATE}/hr × {f.hours||0} = ${((f.hours||0)*RATE).toFixed(2)}</div>
+            <div style={{display:'flex',gap:10}}>
+              <div style={{flex:1}}><Minput placeholder="Hours" type="number" step="0.5" value={f.hours||''} onChange={e=>sf({...f,hours:e.target.value})} /></div>
+              <div style={{width:130}}><Minput placeholder="Rate" type="number" step="1" value={f.rate||DEFAULT_RATE} onChange={e=>sf({...f,rate:e.target.value})} /></div>
+            </div>
+            <div style={{fontFamily:'monospace',fontSize:14,color:'#e2a832',textAlign:'right',padding:'4px 0 12px'}}>${f.rate||DEFAULT_RATE}/hr × {f.hours||0} = ${((f.hours||0)*(f.rate||DEFAULT_RATE)).toFixed(2)}</div>
             <Mbtn c="#8B6914" onClick={addTime}>LOG HOURS</Mbtn>
           </>}
           {modal==='inv' && <>
@@ -400,7 +404,7 @@ function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, updateStat
   function exportBHA() {
     let csv = 'Blunt Health Advisory LLC — Revenue Report\n\n';
     csv += '--- TIME ENTRIES ---\nDate,Client,Description,Hours,Rate,Amount,Status\n';
-    csv += time.map(t => `${(t.date||'').split('T')[0]},${t.client},"${t.description}",${parseFloat(t.hours).toFixed(1)},${RATE},${(parseFloat(t.hours)*RATE).toFixed(2)},${t.status}`).join('\n');
+    csv += time.map(t => `${(t.date||'').split('T')[0]},${t.client},"${t.description}",${parseFloat(t.hours).toFixed(1)},${parseFloat(t.rate||DEFAULT_RATE)},${(parseFloat(t.hours)*parseFloat(t.rate||DEFAULT_RATE)).toFixed(2)},${t.status}`).join('\n');
     csv += '\n\n--- INVOICES ---\nNumber,Client,Hours,Amount,Date Sent,Due Date,Status\n';
     csv += invoices.map(i => `${i.number},${i.client},${parseFloat(i.hours).toFixed(1)},${parseFloat(i.amount).toFixed(2)},${(i.date_sent||'').split('T')[0]},${(i.due_date||'').split('T')[0]},${i.status}`).join('\n');
     csv += `\n\n--- SUMMARY ---\nTotal Hours,${time.reduce((s,t)=>s+parseFloat(t.hours),0).toFixed(1)}`;
@@ -434,16 +438,16 @@ function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, updateStat
     </div>
     <Lbl>TIME ENTRIES</Lbl>
     <table style={{width:'100%',borderCollapse:'collapse',marginTop:10}}>
-      <thead><tr>{['Date','Client','Description','Hours','Amount','Status'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
+      <thead><tr>{['Date','Client','Description','Hours','Rate','Amount','Status'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
       <tbody>
         {time.map(t=>(
           <tr key={t.id} style={{borderBottom:'1px solid #1a1a1a'}}>
             <Td>{(t.date||'').split('T')[0]}</Td><Td c="#ddd">{t.client}</Td><Td>{t.description}</Td>
-            <TdR>{parseFloat(t.hours).toFixed(1)}</TdR><TdR>${(parseFloat(t.hours)*RATE).toFixed(2)}</TdR>
+            <TdR>{parseFloat(t.hours).toFixed(1)}</TdR><TdR>${parseFloat(t.rate||DEFAULT_RATE).toFixed(0)}</TdR><TdR>${(parseFloat(t.hours)*parseFloat(t.rate||DEFAULT_RATE)).toFixed(2)}</TdR>
             <Td><Stag s={t.status}/></Td>
           </tr>
         ))}
-        {time.length===0 && <tr><td colSpan={6} style={{textAlign:'center',padding:48,color:'#777',fontSize:15}}>No hours logged. Click "+ LOG HOURS" to start tracking.</td></tr>}
+        {time.length===0 && <tr><td colSpan={7} style={{textAlign:'center',padding:48,color:'#777',fontSize:15}}>No hours logged. Click "+ LOG HOURS" to start tracking.</td></tr>}
       </tbody>
     </table>
     {invoices.length>0 && <>
@@ -531,6 +535,7 @@ function TasksTab({ tasks, toggle, add, clearDone, del }) {
 function InvPreview({ time, invoices, client, onCreate }) {
   const ub = time.filter(t=>t.status==='unbilled'&&t.client===client);
   const th = ub.reduce((s,t)=>s+parseFloat(t.hours),0);
+  const ta = ub.reduce((s,t)=>s+parseFloat(t.hours)*parseFloat(t.rate||DEFAULT_RATE),0);
   if (!ub.length) return <div style={{textAlign:'center',padding:24,color:'#777',fontSize:15}}>No unbilled hours for {client}</div>;
   return <div>
     <div style={{background:'#0a0a0a',border:'1px solid #222',borderRadius:8,padding:24,margin:'14px 0'}}>
@@ -538,10 +543,10 @@ function InvPreview({ time, invoices, client, onCreate }) {
       <div style={{fontFamily:'monospace',fontSize:12,color:'#888',marginTop:6}}>Invoice BHA-{String(invoices.length+1).padStart(3,'0')} | {new Date().toLocaleDateString()} | Net 30</div>
       <div style={{fontSize:14,color:'#aaa',marginTop:10}}>Bill to: {client}</div>
       <table style={{width:'100%',marginTop:14,borderCollapse:'collapse'}}>
-        <thead><tr>{['Date','Description','Hrs','Amount'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
+        <thead><tr>{['Date','Description','Hrs','Rate','Amount'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
         <tbody>
-          {ub.map((t,i)=><tr key={i}><Td>{(t.date||'').split('T')[0]}</Td><Td>{t.description}</Td><TdR>{parseFloat(t.hours).toFixed(1)}</TdR><TdR>${(parseFloat(t.hours)*RATE).toFixed(2)}</TdR></tr>)}
-          <tr style={{borderTop:'2px solid #333'}}><td colSpan={2} style={{padding:10,fontWeight:700,fontSize:14,color:'#fff'}}>TOTAL DUE</td><TdR style={{fontWeight:700}}>{th.toFixed(1)}</TdR><td style={{padding:10,textAlign:'right',fontWeight:700,fontFamily:'monospace',fontSize:18,color:'#e85d45'}}>${(th*RATE).toFixed(2)}</td></tr>
+          {ub.map((t,i)=><tr key={i}><Td>{(t.date||'').split('T')[0]}</Td><Td>{t.description}</Td><TdR>{parseFloat(t.hours).toFixed(1)}</TdR><TdR>${parseFloat(t.rate||DEFAULT_RATE).toFixed(0)}</TdR><TdR>${(parseFloat(t.hours)*parseFloat(t.rate||DEFAULT_RATE)).toFixed(2)}</TdR></tr>)}
+          <tr style={{borderTop:'2px solid #333'}}><td colSpan={3} style={{padding:10,fontWeight:700,fontSize:14,color:'#fff'}}>TOTAL DUE</td><TdR style={{fontWeight:700}}>{th.toFixed(1)}</TdR><td style={{padding:10,textAlign:'right',fontWeight:700,fontFamily:'monospace',fontSize:18,color:'#e85d45'}}>${ta.toFixed(2)}</td></tr>
         </tbody>
       </table>
     </div>
