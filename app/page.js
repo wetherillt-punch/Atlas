@@ -79,7 +79,8 @@ export default function Home() {
 
   async function createInvoice() {
     const client = f.invClient || 'ATRIO Health Plans';
-    const r = await fetch('/api/invoices', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ client }) });
+    const month = f.invMonth || null;
+    const r = await fetch('/api/invoices', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ client, month }) });
     if (r.ok) await load();
     setModal(null); sf({});
   }
@@ -303,7 +304,7 @@ export default function Home() {
           {modal==='inv' && <>
             <Mtitle>Generate Invoice</Mtitle>
             <Mselect value={f.invClient||'ATRIO Health Plans'} onChange={e=>sf({...f,invClient:e.target.value})} opts={CLIENTS} />
-            <InvPreview time={time} invoices={invoices} client={f.invClient||'ATRIO Health Plans'} onCreate={createInvoice} />
+            <InvPreview time={time} invoices={invoices} client={f.invClient||'ATRIO Health Plans'} month={f.invMonth||null} setMonth={m=>sf({...f,invMonth:m})} onCreate={createInvoice} />
           </>}
         </div>
       </div>}
@@ -472,7 +473,7 @@ function BHATab({ time, invoices, unbH, unbA, setModal, sf, markPaid, updateStat
     <table style={{width:'100%',borderCollapse:'collapse',marginTop:10}}>
       <thead><tr>{['Date','Client','Description','Hours','Rate','Amount','Status',''].map(h=><Th key={h}>{h}</Th>)}</tr></thead>
       <tbody>
-        {time.map(t=>(
+        {[...time].sort((a,b)=>(b.date||'')>(a.date||'')?1:-1).map(t=>(
           <tr key={t.id} onClick={()=>editEntry(t)} style={{borderBottom:'1px solid #1a1a1a',cursor:'pointer',transition:'background 0.1s'}} onMouseEnter={ev=>ev.currentTarget.style.background='#181818'} onMouseLeave={ev=>ev.currentTarget.style.background='transparent'}>
             <Td>{(t.date||'').split('T')[0]}</Td><Td c="#ddd">{t.client}</Td><Td>{t.description}</Td>
             <TdR>{parseFloat(t.hours).toFixed(1)}</TdR><TdR>${parseFloat(t.rate||DEFAULT_RATE).toFixed(0)}</TdR><TdR>${(parseFloat(t.hours)*parseFloat(t.rate||DEFAULT_RATE)).toFixed(2)}</TdR>
@@ -565,15 +566,41 @@ function TasksTab({ tasks, toggle, add, clearDone, del }) {
 }
 
 /* ============ INVOICE PREVIEW ============ */
-function InvPreview({ time, invoices, client, onCreate }) {
-  const ub = time.filter(t=>t.status==='unbilled'&&t.client===client);
+function InvPreview({ time, invoices, client, month, setMonth, onCreate }) {
+  const allUb = time.filter(t=>t.status==='unbilled'&&t.client===client).sort((a,b)=>a.date>b.date?1:-1);
+  
+  // Get unique months from unbilled entries
+  const months = [...new Set(allUb.map(t=>(t.date||'').substring(0,7)))].sort();
+  
+  // Auto-select first month if none selected
+  const selectedMonth = month || (months.length > 0 ? months[0] : null);
+  
+  // Filter to selected month
+  const ub = selectedMonth ? allUb.filter(t=>(t.date||'').startsWith(selectedMonth)) : allUb;
   const th = ub.reduce((s,t)=>s+parseFloat(t.hours),0);
   const ta = ub.reduce((s,t)=>s+parseFloat(t.hours)*parseFloat(t.rate||DEFAULT_RATE),0);
-  if (!ub.length) return <div style={{textAlign:'center',padding:24,color:'#777',fontSize:15}}>No unbilled hours for {client}</div>;
+  
+  if (!allUb.length) return <div style={{textAlign:'center',padding:24,color:'#777',fontSize:15}}>No unbilled hours for {client}</div>;
+  
+  // Format month label
+  const monthLabel = (m) => {
+    const [y, mo] = m.split('-');
+    return new Date(y, parseInt(mo)-1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+  };
+  
   return <div>
-    <div style={{background:'#0a0a0a',border:'1px solid #222',borderRadius:8,padding:24,margin:'14px 0'}}>
+    {/* Month selector */}
+    {months.length > 1 && (
+      <div style={{display:'flex',gap:6,marginBottom:14}}>
+        {months.map(m=>(
+          <button key={m} onClick={()=>setMonth(m)} style={{background:(selectedMonth||months[0])===m?'#222':'transparent',border:'1px solid #282828',borderRadius:4,padding:'8px 14px',color:(selectedMonth||months[0])===m?'#fff':'#888',fontFamily:'monospace',fontSize:11,letterSpacing:1,cursor:'pointer'}}>{monthLabel(m)}</button>
+        ))}
+      </div>
+    )}
+    
+    <div style={{background:'#0a0a0a',border:'1px solid #222',borderRadius:8,padding:24,margin:'8px 0'}}>
       <div style={{fontFamily:'monospace',fontWeight:700,fontSize:15,color:'#fff',letterSpacing:2}}>BLUNT HEALTH ADVISORY LLC</div>
-      <div style={{fontFamily:'monospace',fontSize:12,color:'#888',marginTop:6}}>Invoice BHA-{String(invoices.length+1).padStart(3,'0')} | {new Date().toLocaleDateString()} | Net 30</div>
+      <div style={{fontFamily:'monospace',fontSize:12,color:'#888',marginTop:6}}>Invoice BHA-{String(invoices.length+1).padStart(3,'0')} | {selectedMonth ? monthLabel(selectedMonth) : ''} | Net 30</div>
       <div style={{fontSize:14,color:'#aaa',marginTop:10}}>Bill to: {client}</div>
       <table style={{width:'100%',marginTop:14,borderCollapse:'collapse'}}>
         <thead><tr>{['Date','Description','Hrs','Rate','Amount'].map(h=><Th key={h}>{h}</Th>)}</tr></thead>

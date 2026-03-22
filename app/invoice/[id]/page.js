@@ -10,7 +10,6 @@ export default function InvoicePage() {
   if (!data) return <div style={{padding:40,color:'#999'}}>Loading...</div>;
 
   const { invoice:inv, items } = data;
-  const R = 250;
 
   return (
     <div style={{background:'#fff',color:'#000',minHeight:'100vh'}}>
